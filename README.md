@@ -46,7 +46,7 @@ flowchart TB
 On a fresh VPS:
 
 ```bash
-git clone git@github.com:andreapollastri/johnny.git
+git clone https://github.com/andreapollastri/johnny.git
 cd johnny
 sudo bash scripts/autoinstall.sh
 ```
