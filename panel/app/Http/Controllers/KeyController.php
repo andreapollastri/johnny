@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\GarageS3;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Process;
@@ -10,24 +9,17 @@ use Illuminate\View\View;
 
 class KeyController extends Controller
 {
-    public function __construct(
-        private GarageS3 $garage
-    ) {}
-
     public function index(): View
     {
         $output = $this->runJohnny(['key', 'list']);
         $error = null;
         if ($output === null) {
-            $error = 'Could not run `johnny key list`. Ensure sudoers allows the PHP user to run `sudo -u johnny /usr/local/bin/johnny` (see Johnny install docs).';
+            $error = 'Could not run `johnny key list`. Ensure sudoers allows the PHP user to run `sudo -u johnny /usr/local/bin/johnny`.';
         }
-
-        $buckets = collect($this->garage->listBuckets())->pluck('name')->toArray();
 
         return view('keys.index', [
             'output' => $output ?? '',
             'error' => $error,
-            'buckets' => $buckets,
         ]);
     }
 
@@ -35,7 +27,6 @@ class KeyController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:128', 'regex:/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/'],
-            'allow_all_buckets' => ['nullable', 'boolean'],
         ]);
 
         $result = Process::run([
@@ -48,111 +39,28 @@ class KeyController extends Controller
             return back()->withErrors(['name' => $result->errorOutput() ?: $result->output()])->withInput();
         }
 
-        if ($request->boolean('allow_all_buckets')) {
-            $buckets = collect($this->garage->listBuckets())->pluck('name');
-            foreach ($buckets as $bucket) {
-                $this->allowKeyOnBucket($validated['name'], $bucket);
-            }
-        }
-
         return redirect()->route('keys.index')
             ->with('key_create_output', $result->output())
-            ->with('status', $request->boolean('allow_all_buckets')
-                ? 'Key created and granted read/write/owner on all existing buckets.'
-                : 'Key created. Grant bucket permissions below.');
+            ->with('status', 'Key created. Grant bucket permissions from the bucket detail page.');
     }
 
-    public function allow(Request $request): RedirectResponse
+    public function destroy(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'key_name' => ['required', 'string', 'max:128'],
-            'bucket' => ['required', 'string', 'max:255'],
-            'read' => ['nullable', 'boolean'],
-            'write' => ['nullable', 'boolean'],
-            'owner' => ['nullable', 'boolean'],
         ]);
 
-        if (! $request->boolean('read') && ! $request->boolean('write') && ! $request->boolean('owner')) {
-            return back()->withErrors(['bucket' => 'Select at least one permission (read, write, or owner).'])->withInput();
-        }
-
-        $cmd = [
+        $result = Process::run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
-            'bucket', 'allow',
-        ];
-        if ($request->boolean('read')) {
-            $cmd[] = '--read';
-        }
-        if ($request->boolean('write')) {
-            $cmd[] = '--write';
-        }
-        if ($request->boolean('owner')) {
-            $cmd[] = '--owner';
-        }
-        $cmd[] = $validated['bucket'];
-        $cmd[] = '--key';
-        $cmd[] = $validated['key_name'];
-
-        $result = Process::run($cmd);
+            'key', 'delete', $validated['key_name'],
+        ]);
 
         if (! $result->successful()) {
-            return back()->withErrors(['bucket' => $result->errorOutput() ?: $result->output()])->withInput();
+            return back()->withErrors(['key_name' => $result->errorOutput() ?: $result->output()]);
         }
 
-        return redirect()->route('keys.index')
-            ->with('status', "Permissions granted for key \"{$validated['key_name']}\" on bucket \"{$validated['bucket']}\".");
-    }
-
-    public function deny(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'key_name' => ['required', 'string', 'max:128'],
-            'bucket' => ['required', 'string', 'max:255'],
-            'read' => ['nullable', 'boolean'],
-            'write' => ['nullable', 'boolean'],
-            'owner' => ['nullable', 'boolean'],
-        ]);
-
-        if (! $request->boolean('read') && ! $request->boolean('write') && ! $request->boolean('owner')) {
-            return back()->withErrors(['bucket' => 'Select at least one permission to revoke.'])->withInput();
-        }
-
-        $cmd = [
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'deny',
-        ];
-        if ($request->boolean('read')) {
-            $cmd[] = '--read';
-        }
-        if ($request->boolean('write')) {
-            $cmd[] = '--write';
-        }
-        if ($request->boolean('owner')) {
-            $cmd[] = '--owner';
-        }
-        $cmd[] = $validated['bucket'];
-        $cmd[] = '--key';
-        $cmd[] = $validated['key_name'];
-
-        $result = Process::run($cmd);
-
-        if (! $result->successful()) {
-            return back()->withErrors(['bucket' => $result->errorOutput() ?: $result->output()])->withInput();
-        }
-
-        return redirect()->route('keys.index')
-            ->with('status', "Permissions revoked for key \"{$validated['key_name']}\" on bucket \"{$validated['bucket']}\".");
-    }
-
-    private function allowKeyOnBucket(string $keyName, string $bucket): void
-    {
-        Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'allow', '--read', '--write', '--owner', $bucket, '--key', $keyName,
-        ]);
+        return redirect()->route('keys.index')->with('status', "Key \"{$validated['key_name']}\" deleted.");
     }
 
     private function runJohnny(array $args): ?string
@@ -160,10 +68,6 @@ class KeyController extends Controller
         $cmd = array_merge(['sudo', '-u', 'johnny', '/usr/local/bin/johnny'], $args);
         $result = Process::run($cmd);
 
-        if (! $result->successful()) {
-            return null;
-        }
-
-        return $result->output();
+        return $result->successful() ? $result->output() : null;
     }
 }

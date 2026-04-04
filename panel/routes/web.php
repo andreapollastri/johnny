@@ -18,15 +18,16 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/buckets', [BucketController::class, 'index'])->name('buckets.index');
     Route::post('/buckets', [BucketController::class, 'store'])->name('buckets.store');
+    Route::get('/buckets/{bucket}', [BucketController::class, 'show'])->name('buckets.show');
     Route::delete('/buckets/{bucket}', [BucketController::class, 'destroy'])->name('buckets.destroy');
+    Route::post('/buckets/{bucket}/allow', [BucketController::class, 'allow'])->name('buckets.allow');
+    Route::post('/buckets/{bucket}/deny', [BucketController::class, 'deny'])->name('buckets.deny');
 
-    Route::get('/buckets/{bucket}/objects', [ObjectController::class, 'index'])->name('objects.index');
     Route::post('/buckets/{bucket}/objects', [ObjectController::class, 'store'])->name('objects.store');
     Route::get('/buckets/{bucket}/objects/download', [ObjectController::class, 'download'])->name('objects.download');
     Route::delete('/buckets/{bucket}/objects', [ObjectController::class, 'destroy'])->name('objects.destroy');
 
     Route::get('/keys', [KeyController::class, 'index'])->name('keys.index');
     Route::post('/keys', [KeyController::class, 'store'])->name('keys.store');
-    Route::post('/keys/allow', [KeyController::class, 'allow'])->name('keys.allow');
-    Route::post('/keys/deny', [KeyController::class, 'deny'])->name('keys.deny');
+    Route::delete('/keys', [KeyController::class, 'destroy'])->name('keys.destroy');
 });

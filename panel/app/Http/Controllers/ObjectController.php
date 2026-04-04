@@ -6,7 +6,6 @@ use App\Services\GarageS3;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ObjectController extends Controller
@@ -14,18 +13,6 @@ class ObjectController extends Controller
     public function __construct(
         private GarageS3 $garage
     ) {}
-
-    public function index(Request $request, string $bucket): View
-    {
-        $prefix = (string) $request->query('prefix', '');
-        $objects = $this->garage->listObjects($bucket, $prefix);
-
-        return view('objects.index', [
-            'bucket' => $bucket,
-            'prefix' => $prefix,
-            'objects' => $objects,
-        ]);
-    }
 
     public function store(Request $request, string $bucket): RedirectResponse
     {
@@ -49,7 +36,7 @@ class ObjectController extends Controller
             return back()->withErrors(['file' => $e->getMessage()]);
         }
 
-        return redirect()->route('objects.index', ['bucket' => $bucket, 'prefix' => $prefix])->with('status', 'Uploaded.');
+        return redirect()->route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $prefix])->with('status', 'Uploaded.');
     }
 
     public function download(Request $request, string $bucket): StreamedResponse|Response
@@ -87,6 +74,6 @@ class ObjectController extends Controller
             return back()->withErrors(['error' => $e->getMessage()]);
         }
 
-        return redirect()->route('objects.index', ['bucket' => $bucket, 'prefix' => $prefix])->with('status', 'Deleted.');
+        return redirect()->route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $prefix])->with('status', 'Deleted.');
     }
 }

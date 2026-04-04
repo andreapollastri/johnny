@@ -27,7 +27,9 @@
 <div class="card">
     <h2>All buckets</h2>
     @if (empty($buckets))
-        <p class="muted mb-0">No buckets yet.</p>
+        <div class="empty-state">
+            <p>No buckets yet.</p>
+        </div>
     @else
         <table>
             <thead>
@@ -40,7 +42,7 @@
             <tbody>
             @foreach ($buckets as $b)
                 <tr>
-                    <td><a href="{{ route('objects.index', ['bucket' => $b['name']]) }}">{{ $b['name'] }}</a></td>
+                    <td><a href="{{ route('buckets.show', $b['name']) }}">{{ $b['name'] }}</a></td>
                     <td class="muted">{{ $b['created'] ?? '—' }}</td>
                     <td>
                         <form method="POST" action="{{ route('buckets.destroy', $b['name']) }}" onsubmit="return confirm('Delete bucket {{ $b['name'] }}? Must be empty.');">

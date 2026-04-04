@@ -638,6 +638,46 @@ pre.raw {
   height: auto;
 }
 
+/* --- Tabs --- */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+
+.tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.825rem;
+  font-weight: 500;
+  color: var(--text-sec);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.tabs a:hover {
+  color: var(--text);
+  opacity: 1;
+}
+.tabs a.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* --- Empty state --- */
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-sec);
+}
+.empty-state p {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
   .topbar { padding: 0 1rem; }
