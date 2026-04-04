@@ -10,15 +10,26 @@ use Illuminate\View\View;
 
 class BucketController extends Controller
 {
+    private const SYSTEM_KEY_NAMES = ['johnny-default', 'johnny-backup'];
+    private const PROTECTED_BUCKETS = ['default'];
+
     public function __construct(
         private GarageS3 $garage
     ) {}
 
     public function index(): View
     {
-        $buckets = $this->garage->listBuckets();
+        $error = '';
+        try {
+            $buckets = $this->garage->listBuckets();
+        } catch (\Throwable $e) {
+            $buckets = [];
+            $error = str_contains($e->getMessage(), 'AccessDenied')
+                ? 'The panel S3 key does not have permission to list buckets. Check GARAGE_* credentials in panel/.env.'
+                : $e->getMessage();
+        }
 
-        return view('buckets.index', compact('buckets'));
+        return view('buckets.index', compact('buckets', 'error'));
     }
 
     public function show(Request $request, string $bucket): View
@@ -27,17 +38,35 @@ class BucketController extends Controller
         $prefix = (string) $request->query('prefix', '');
 
         $objects = [];
+        $objectsError = '';
         $authorizedKeys = [];
         $bucketInfoRaw = '';
         $allKeys = [];
 
         if ($tab === 'objects') {
-            $objects = $this->garage->listObjects($bucket, $prefix);
+            try {
+                $objects = $this->garage->listObjects($bucket, $prefix);
+            } catch (\Throwable $e) {
+                $objectsError = str_contains($e->getMessage(), 'AccessDenied')
+                    ? "The panel key does not have access to this bucket. Go to the Keys tab and grant permissions to the panel key."
+                    : $e->getMessage();
+            }
         }
 
         if ($tab === 'keys') {
             [$authorizedKeys, $bucketInfoRaw] = $this->parseBucketInfo($bucket);
-            $allKeys = $this->parseKeys();
+
+            // Hide system keys from the authorized list
+            $authorizedKeys = array_values(array_filter(
+                $authorizedKeys,
+                fn ($k) => ! in_array($k['name'], self::SYSTEM_KEY_NAMES, true),
+            ));
+
+            // Only show user-created keys in the grant dropdown
+            $allKeys = array_values(array_filter(
+                $this->parseKeys(),
+                fn ($k) => ! in_array($k['name'], self::SYSTEM_KEY_NAMES, true),
+            ));
         }
 
         return view('buckets.show', [
@@ -45,9 +74,11 @@ class BucketController extends Controller
             'tab' => $tab,
             'prefix' => $prefix,
             'objects' => $objects,
+            'objectsError' => $objectsError,
             'authorizedKeys' => $authorizedKeys,
             'bucketInfoRaw' => $bucketInfoRaw,
             'allKeys' => $allKeys,
+            'isProtected' => in_array($bucket, self::PROTECTED_BUCKETS, true),
         ]);
     }
 
@@ -76,6 +107,10 @@ class BucketController extends Controller
 
     public function destroy(string $bucket): RedirectResponse
     {
+        if (in_array($bucket, self::PROTECTED_BUCKETS, true)) {
+            return back()->withErrors(['error' => "The \"{$bucket}\" bucket is protected and cannot be deleted."]);
+        }
+
         $result = Process::input($bucket."\n")->run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
@@ -164,16 +199,6 @@ class BucketController extends Controller
     }
 
     /**
-     * Parse `garage bucket info` to extract authorized keys.
-     *
-     * Garage outputs a table like:
-     *   ==== KEYS FOR THIS BUCKET ====
-     *   Permissions  Access key                                  Local aliases
-     *   RWO          GK22da9f9d8430f684984ddb90  johnny-default
-     *   R            GK6cf8ce799a203f280f78e0e9  test
-     *
-     * Permissions are a combination of R (read), W (write), O (owner).
-     *
      * @return array{0: list<array{id: string, name: string, permissions: string}>, 1: string}
      */
     private function parseBucketInfo(string $bucket): array
@@ -189,7 +214,6 @@ class BucketController extends Controller
 
         foreach (explode("\n", $raw) as $line) {
             $trimmed = trim($line);
-            // Match: "RWO  GKxxxx  key-name" (permissions + key ID + optional name)
             if (preg_match('/^([RWO]+)\s+(GK[0-9a-f]+)\s*(.*)$/i', $trimmed, $m)) {
                 $perms = str_split(strtoupper(trim($m[1])));
                 $readable = [];
@@ -209,14 +233,6 @@ class BucketController extends Controller
     }
 
     /**
-     * Parse `johnny key list` to extract key IDs and names.
-     *
-     * Garage `key list` outputs a table like:
-     *   KEY_ID                          NAME
-     *   GK78fdba3a9e6041ec953b280c      johnny-default
-     *
-     * Or in some versions just lines of "GKxxx  name".
-     *
      * @return list<array{id: string, name: string}>
      */
     private function parseKeys(): array

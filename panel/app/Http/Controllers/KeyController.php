@@ -9,6 +9,8 @@ use Illuminate\View\View;
 
 class KeyController extends Controller
 {
+    private const SYSTEM_KEY_NAMES = ['johnny-default', 'johnny-backup'];
+
     public function index(): View
     {
         $output = $this->runJohnny(['key', 'list']);
@@ -17,10 +19,12 @@ class KeyController extends Controller
             $error = 'Could not run `johnny key list`. Ensure sudoers allows the PHP user to run `sudo -u johnny /usr/local/bin/johnny`.';
         }
 
-        $keys = $this->parseKeys($output ?? '');
+        $keys = collect($this->parseKeys($output ?? ''))
+            ->reject(fn ($k) => in_array($k['name'], self::SYSTEM_KEY_NAMES, true))
+            ->values()
+            ->all();
 
         return view('keys.index', [
-            'output' => $output ?? '',
             'error' => $error,
             'keys' => $keys,
         ]);
@@ -31,6 +35,10 @@ class KeyController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:128', 'regex:/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/'],
         ]);
+
+        if (in_array($validated['name'], self::SYSTEM_KEY_NAMES, true)) {
+            return back()->withErrors(['name' => 'This name is reserved for the system.'])->withInput();
+        }
 
         $result = Process::run([
             'sudo', '-u', 'johnny',
@@ -53,6 +61,10 @@ class KeyController extends Controller
             'key_id' => ['required', 'string', 'max:128'],
         ]);
 
+        if ($this->isSystemKey($validated['key_id'])) {
+            return back()->withErrors(['key_id' => 'System keys cannot be deleted.']);
+        }
+
         $result = Process::run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
@@ -64,6 +76,23 @@ class KeyController extends Controller
         }
 
         return redirect()->route('keys.index')->with('status', 'Key deleted.');
+    }
+
+    private function isSystemKey(string $keyId): bool
+    {
+        $panelKeyId = config('services.garage.key');
+        if ($panelKeyId && $keyId === $panelKeyId) {
+            return true;
+        }
+
+        $allKeys = $this->parseKeys($this->runJohnny(['key', 'list']) ?? '');
+        foreach ($allKeys as $k) {
+            if ($k['id'] === $keyId && in_array($k['name'], self::SYSTEM_KEY_NAMES, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

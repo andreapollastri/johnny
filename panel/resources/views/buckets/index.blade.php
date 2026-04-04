@@ -14,6 +14,9 @@
 @if ($errors->any())
     <div class="errors">{{ $errors->first() }}</div>
 @endif
+@if (!empty($error))
+    <div class="errors">{{ $error }}</div>
+@endif
 
 <div class="card">
     <h2>Create bucket</h2>
@@ -45,11 +48,15 @@
                     <td><a href="{{ route('buckets.show', $b['name']) }}">{{ $b['name'] }}</a></td>
                     <td class="muted">{{ $b['created'] ?? '—' }}</td>
                     <td>
-                        <form method="POST" action="{{ route('buckets.destroy', $b['name']) }}" onsubmit="return confirm('Delete bucket {{ $b['name'] }}? Must be empty.');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="danger sm">Delete</button>
-                        </form>
+                        @if ($b['name'] === 'default')
+                            <span class="muted text-xs">protected</span>
+                        @else
+                            <form method="POST" action="{{ route('buckets.destroy', $b['name']) }}" onsubmit="return confirm('Delete bucket {{ $b['name'] }}? Must be empty.');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="danger sm">Delete</button>
+                            </form>
+                        @endif
                     </td>
                 </tr>
             @endforeach

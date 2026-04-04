@@ -5,7 +5,7 @@
 @section('content')
 <div class="page-header">
     <h1>API Keys</h1>
-    <p class="subtitle">Create and delete Garage API keys. To grant bucket access, open the bucket and use the Keys tab.</p>
+    <p class="subtitle">Create and delete API keys. To grant bucket access, open the bucket and use the Keys tab.</p>
 </div>
 
 @if (session('status'))
@@ -65,6 +65,12 @@
 <div class="card">
     <h2>Key list</h2>
     <div class="errors">{{ $error }}</div>
+</div>
+@else
+<div class="card">
+    <div class="empty-state">
+        <p>No custom keys yet. Create one above.</p>
+    </div>
 </div>
 @endif
 @endsection

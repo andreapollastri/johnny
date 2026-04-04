@@ -22,32 +22,36 @@
 
 @if ($tab === 'objects')
     {{-- ===== Objects tab ===== --}}
-    <div class="card">
-        <h2>Filter by prefix</h2>
-        <form method="GET" action="{{ route('buckets.show', $bucket) }}" class="form-row">
-            <input type="hidden" name="tab" value="objects">
-            <input type="text" name="prefix" value="{{ $prefix }}" placeholder="folder/">
-            <button type="submit" class="secondary">Apply</button>
-        </form>
-    </div>
 
-    <div class="card">
-        <h2>Upload</h2>
-        <form method="POST" action="{{ route('objects.store', $bucket) }}" enctype="multipart/form-data" class="form-row">
-            @csrf
-            <input type="hidden" name="prefix" value="{{ $prefix }}">
-            <input type="file" name="file" required>
-            <button type="submit">Upload</button>
-        </form>
-    </div>
+    @if ($objectsError)
+        <div class="errors">{{ $objectsError }}</div>
+    @else
+        <div class="card">
+            <h2>Filter by prefix</h2>
+            <form method="GET" action="{{ route('buckets.show', $bucket) }}" class="form-row">
+                <input type="hidden" name="tab" value="objects">
+                <input type="text" name="prefix" value="{{ $prefix }}" placeholder="folder/">
+                <button type="submit" class="secondary">Apply</button>
+            </form>
+        </div>
 
-    <div class="card">
-        <h2>Objects</h2>
-        @if (empty($objects))
-            <div class="empty-state">
-                <p>No objects{{ $prefix ? ' with prefix "'.$prefix.'"' : '' }}.</p>
-            </div>
-        @else
+        <div class="card">
+            <h2>Upload</h2>
+            <form method="POST" action="{{ route('objects.store', $bucket) }}" enctype="multipart/form-data" class="form-row">
+                @csrf
+                <input type="hidden" name="prefix" value="{{ $prefix }}">
+                <input type="file" name="file" required>
+                <button type="submit">Upload</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Objects</h2>
+            @if (empty($objects))
+                <div class="empty-state">
+                    <p>No objects{{ $prefix ? ' with prefix "'.$prefix.'"' : '' }}.</p>
+                </div>
+            @else
             <table>
                 <thead>
                     <tr>
@@ -78,49 +82,52 @@
                 </tbody>
             </table>
         @endif
-    </div>
+        </div>
+    @endif
 
 @else
     {{-- ===== Keys tab ===== --}}
     <div class="card">
         <h2>Grant access</h2>
         <p class="muted text-sm" style="margin-bottom:0.75rem;">Select a key and the permissions to grant on this bucket.</p>
-        <form method="POST" action="{{ route('buckets.allow', $bucket) }}">
-            @csrf
-            <div class="form-row" style="margin-bottom:0.5rem;">
-                <div>
-                    <label for="allow_key">Key</label>
-                    @if (count($allKeys) > 0)
+        @if (count($allKeys) > 0)
+            <form method="POST" action="{{ route('buckets.allow', $bucket) }}">
+                @csrf
+                <div class="form-row" style="margin-bottom:0.5rem;">
+                    <div>
+                        <label for="allow_key">Key</label>
                         <select id="allow_key" name="key_id" required style="max-width:20rem;">
                             @foreach ($allKeys as $k)
                                 <option value="{{ $k['id'] }}">{{ $k['name'] }} ({{ $k['id'] }})</option>
                             @endforeach
                         </select>
-                    @else
-                        <input type="text" id="allow_key" name="key_id" placeholder="GKxxxx..." required style="max-width:20rem;">
-                    @endif
+                    </div>
                 </div>
+                <div class="form-row" style="margin-bottom:0.75rem;">
+                    <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                        <input type="checkbox" name="read" value="1" checked> <span class="text-sm">Read</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                        <input type="checkbox" name="write" value="1" checked> <span class="text-sm">Write</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                        <input type="checkbox" name="owner" value="1" checked> <span class="text-sm">Owner</span>
+                    </label>
+                </div>
+                <button type="submit">Grant</button>
+            </form>
+        @else
+            <div class="empty-state">
+                <p>No custom keys available. Create a key first from the <a href="{{ route('keys.index') }}">Keys</a> page.</p>
             </div>
-            <div class="form-row" style="margin-bottom:0.75rem;">
-                <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                    <input type="checkbox" name="read" value="1" checked> <span class="text-sm">Read</span>
-                </label>
-                <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                    <input type="checkbox" name="write" value="1" checked> <span class="text-sm">Write</span>
-                </label>
-                <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                    <input type="checkbox" name="owner" value="1" checked> <span class="text-sm">Owner</span>
-                </label>
-            </div>
-            <button type="submit">Grant</button>
-        </form>
+        @endif
     </div>
 
     <div class="card">
         <h2>Authorized keys</h2>
         @if (empty($authorizedKeys))
             <div class="empty-state">
-                <p>No keys have access to this bucket yet.</p>
+                <p>No custom keys have access to this bucket yet.</p>
             </div>
         @else
             <table>
@@ -152,13 +159,6 @@
                 @endforeach
                 </tbody>
             </table>
-        @endif
-
-        @if ($bucketInfoRaw)
-            <details style="margin-top:1rem;">
-                <summary class="muted text-sm" style="cursor:pointer;">Raw bucket info</summary>
-                <pre class="raw" style="margin-top:0.5rem;">{{ $bucketInfoRaw }}</pre>
-            </details>
         @endif
     </div>
 @endif
