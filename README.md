@@ -46,7 +46,7 @@ flowchart TB
 On a fresh VPS:
 
 ```bash
-git clone <this-repository-url>
+git clone git@github.com:andreapollastri/johnny.git
 cd johnny
 sudo bash scripts/autoinstall.sh
 ```
@@ -88,14 +88,14 @@ sudo -u johnny johnny bucket create my-bucket
 
 Backup targets (SFTP) — **run as root**:
 
-| Command | Description |
-|--------|---------------|
-| `sudo johnny backup list` | List targets and show retention / remote base path |
-| `sudo johnny backup create NAME` | Interactive prompts for host, port, user, password (or use `--host`, `--port`, `--user`, `--password`) |
-| `sudo johnny backup delete NAME` | Remove a target |
-| `sudo johnny backup update NAME` | Change fields; use `-p` to prompt for a new password |
-| `sudo johnny backup set-retention N` | Keep dated folders not older than **N** days (default **90**) |
-| `sudo johnny backup run` | Run the same job as cron immediately |
+| Command                              | Description                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `sudo johnny backup list`            | List targets and show retention / remote base path                                                     |
+| `sudo johnny backup create NAME`     | Interactive prompts for host, port, user, password (or use `--host`, `--port`, `--user`, `--password`) |
+| `sudo johnny backup delete NAME`     | Remove a target                                                                                        |
+| `sudo johnny backup update NAME`     | Change fields; use `-p` to prompt for a new password                                                   |
+| `sudo johnny backup set-retention N` | Keep dated folders not older than **N** days (default **90**)                                          |
+| `sudo johnny backup run`             | Run the same job as cron immediately                                                                   |
 
 Configuration file: **`/etc/johnny/backup.json`** (mode `600`). Passwords are stored **in plain text** — protect this file. You can edit **`remote_base_path`** here (default **`johnny-backups`**, created under the SFTP user’s home unless the server chroots elsewhere).
 
