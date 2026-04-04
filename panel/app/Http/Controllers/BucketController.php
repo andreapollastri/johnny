@@ -37,7 +37,7 @@ class BucketController extends Controller
 
         if ($tab === 'keys') {
             [$authorizedKeys, $bucketInfoRaw] = $this->parseBucketInfo($bucket);
-            $allKeys = $this->parseKeyNames();
+            $allKeys = $this->parseKeys();
         }
 
         return view('buckets.show', [
@@ -92,14 +92,14 @@ class BucketController extends Controller
     public function allow(Request $request, string $bucket): RedirectResponse
     {
         $validated = $request->validate([
-            'key_name' => ['required', 'string', 'max:128'],
+            'key_id' => ['required', 'string', 'max:128'],
             'read' => ['nullable', 'boolean'],
             'write' => ['nullable', 'boolean'],
             'owner' => ['nullable', 'boolean'],
         ]);
 
         if (! $request->boolean('read') && ! $request->boolean('write') && ! $request->boolean('owner')) {
-            return back()->withErrors(['key_name' => 'Select at least one permission.'])->withInput();
+            return back()->withErrors(['key_id' => 'Select at least one permission.'])->withInput();
         }
 
         $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'allow'];
@@ -114,29 +114,29 @@ class BucketController extends Controller
         }
         $cmd[] = $bucket;
         $cmd[] = '--key';
-        $cmd[] = $validated['key_name'];
+        $cmd[] = $validated['key_id'];
 
         $result = Process::run($cmd);
 
         if (! $result->successful()) {
-            return back()->withErrors(['key_name' => $result->errorOutput() ?: $result->output()])->withInput();
+            return back()->withErrors(['key_id' => $result->errorOutput() ?: $result->output()])->withInput();
         }
 
         return redirect()->route('buckets.show', ['bucket' => $bucket, 'tab' => 'keys'])
-            ->with('status', "Permissions granted for \"{$validated['key_name']}\".");
+            ->with('status', 'Permissions granted.');
     }
 
     public function deny(Request $request, string $bucket): RedirectResponse
     {
         $validated = $request->validate([
-            'key_name' => ['required', 'string', 'max:128'],
+            'key_id' => ['required', 'string', 'max:128'],
             'read' => ['nullable', 'boolean'],
             'write' => ['nullable', 'boolean'],
             'owner' => ['nullable', 'boolean'],
         ]);
 
         if (! $request->boolean('read') && ! $request->boolean('write') && ! $request->boolean('owner')) {
-            return back()->withErrors(['key_name' => 'Select at least one permission to revoke.'])->withInput();
+            return back()->withErrors(['key_id' => 'Select at least one permission to revoke.'])->withInput();
         }
 
         $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'deny'];
@@ -151,20 +151,28 @@ class BucketController extends Controller
         }
         $cmd[] = $bucket;
         $cmd[] = '--key';
-        $cmd[] = $validated['key_name'];
+        $cmd[] = $validated['key_id'];
 
         $result = Process::run($cmd);
 
         if (! $result->successful()) {
-            return back()->withErrors(['key_name' => $result->errorOutput() ?: $result->output()])->withInput();
+            return back()->withErrors(['key_id' => $result->errorOutput() ?: $result->output()])->withInput();
         }
 
         return redirect()->route('buckets.show', ['bucket' => $bucket, 'tab' => 'keys'])
-            ->with('status', "Permissions revoked for \"{$validated['key_name']}\".");
+            ->with('status', 'Permissions revoked.');
     }
 
     /**
-     * Parse `garage bucket info` output to extract authorized keys.
+     * Parse `garage bucket info` to extract authorized keys.
+     *
+     * Garage outputs a table like:
+     *   ==== KEYS FOR THIS BUCKET ====
+     *   Permissions  Access key                                  Local aliases
+     *   RWO          GK22da9f9d8430f684984ddb90  johnny-default
+     *   R            GK6cf8ce799a203f280f78e0e9  test
+     *
+     * Permissions are a combination of R (read), W (write), O (owner).
      *
      * @return array{0: list<array{id: string, name: string, permissions: string}>, 1: string}
      */
@@ -179,18 +187,21 @@ class BucketController extends Controller
         $raw = $result->successful() ? $result->output() : '';
         $keys = [];
 
-        // Garage outputs lines like: "  GKxxxx (name): read, write, owner"
-        // or "  GKxxxx: read, write" (no name)
-        // Format varies; we look for lines starting with whitespace + GK
         foreach (explode("\n", $raw) as $line) {
-            $line = trim($line);
-            // Match: GK<hex> (<name>): <permissions>
-            if (preg_match('/^(GK[0-9a-f]+)\s+\(([^)]+)\)\s*:\s*(.+)$/i', $line, $m)) {
-                $keys[] = ['id' => $m[1], 'name' => trim($m[2]), 'permissions' => trim($m[3])];
-            }
-            // Match: GK<hex>: <permissions> (no name)
-            elseif (preg_match('/^(GK[0-9a-f]+)\s*:\s*(.+)$/i', $line, $m)) {
-                $keys[] = ['id' => $m[1], 'name' => '', 'permissions' => trim($m[2])];
+            $trimmed = trim($line);
+            // Match: "RWO  GKxxxx  key-name" (permissions + key ID + optional name)
+            if (preg_match('/^([RWO]+)\s+(GK[0-9a-f]+)\s*(.*)$/i', $trimmed, $m)) {
+                $perms = str_split(strtoupper(trim($m[1])));
+                $readable = [];
+                if (in_array('R', $perms)) $readable[] = 'read';
+                if (in_array('W', $perms)) $readable[] = 'write';
+                if (in_array('O', $perms)) $readable[] = 'owner';
+
+                $keys[] = [
+                    'id' => trim($m[2]),
+                    'name' => trim($m[3]),
+                    'permissions' => implode(', ', $readable),
+                ];
             }
         }
 
@@ -198,11 +209,17 @@ class BucketController extends Controller
     }
 
     /**
-     * Parse `johnny key list` to extract key names for the dropdown.
+     * Parse `johnny key list` to extract key IDs and names.
      *
-     * @return list<string>
+     * Garage `key list` outputs a table like:
+     *   KEY_ID                          NAME
+     *   GK78fdba3a9e6041ec953b280c      johnny-default
+     *
+     * Or in some versions just lines of "GKxxx  name".
+     *
+     * @return list<array{id: string, name: string}>
      */
-    private function parseKeyNames(): array
+    private function parseKeys(): array
     {
         $result = Process::run([
             'sudo', '-u', 'johnny',
@@ -214,16 +231,15 @@ class BucketController extends Controller
             return [];
         }
 
-        $names = [];
+        $keys = [];
         foreach (explode("\n", $result->output()) as $line) {
             $line = trim($line);
-            // Garage key list outputs lines like: "GKxxxx  key-name"
-            if (preg_match('/^GK[0-9a-f]+\s+(.+)$/i', $line, $m)) {
-                $names[] = trim($m[1]);
+            if (preg_match('/^(GK[0-9a-f]+)\s+(.+)$/i', $line, $m)) {
+                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
             }
         }
 
-        return $names;
+        return $keys;
     }
 
     private function allowKeyOnBucket(string $keyName, string $bucket): void

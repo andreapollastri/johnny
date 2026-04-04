@@ -32,23 +32,39 @@
     </form>
 </div>
 
+@if (count($keys) > 0)
 <div class="card">
-    <h2>Delete key</h2>
-    <p class="muted text-sm" style="margin-bottom:0.75rem;">This permanently removes the key and all its bucket permissions.</p>
-    <form method="POST" action="{{ route('keys.destroy') }}" class="form-row" onsubmit="return confirm('Permanently delete this key?');">
-        @csrf
-        @method('DELETE')
-        <input type="text" name="key_name" placeholder="key-name" required>
-        <button type="submit" class="danger">Delete key</button>
-    </form>
+    <h2>All keys</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Key ID</th>
+                <th>Name</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach ($keys as $k)
+            <tr>
+                <td><code class="text-xs">{{ $k['id'] }}</code></td>
+                <td>{{ $k['name'] }}</td>
+                <td>
+                    <form method="POST" action="{{ route('keys.destroy') }}" onsubmit="return confirm('Permanently delete key {{ $k['name'] }} ({{ $k['id'] }})?');" style="margin:0;">
+                        @csrf
+                        @method('DELETE')
+                        <input type="hidden" name="key_id" value="{{ $k['id'] }}">
+                        <button type="submit" class="danger sm">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        @endforeach
+        </tbody>
+    </table>
 </div>
-
+@elseif ($error)
 <div class="card">
     <h2>Key list</h2>
-    @if ($error)
-        <div class="errors">{{ $error }}</div>
-    @else
-        <pre class="raw">{{ $output }}</pre>
-    @endif
+    <div class="errors">{{ $error }}</div>
 </div>
+@endif
 @endsection

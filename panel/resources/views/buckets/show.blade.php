@@ -91,13 +91,13 @@
                 <div>
                     <label for="allow_key">Key</label>
                     @if (count($allKeys) > 0)
-                        <select id="allow_key" name="key_name" required style="max-width:16rem;">
+                        <select id="allow_key" name="key_id" required style="max-width:20rem;">
                             @foreach ($allKeys as $k)
-                                <option value="{{ $k }}">{{ $k }}</option>
+                                <option value="{{ $k['id'] }}">{{ $k['name'] }} ({{ $k['id'] }})</option>
                             @endforeach
                         </select>
                     @else
-                        <input type="text" id="allow_key" name="key_name" placeholder="key-name" required style="max-width:16rem;">
+                        <input type="text" id="allow_key" name="key_id" placeholder="GKxxxx..." required style="max-width:20rem;">
                     @endif
                 </div>
             </div>
@@ -139,9 +139,9 @@
                         <td>{{ $k['name'] ?: '—' }}</td>
                         <td class="muted">{{ $k['permissions'] }}</td>
                         <td>
-                            <form method="POST" action="{{ route('buckets.deny', $bucket) }}" onsubmit="return confirm('Revoke all permissions for {{ $k['name'] ?: $k['id'] }} on this bucket?');" style="margin:0;">
+                            <form method="POST" action="{{ route('buckets.deny', $bucket) }}" onsubmit="return confirm('Revoke all permissions for {{ $k['name'] ?: $k['id'] }}?');" style="margin:0;">
                                 @csrf
-                                <input type="hidden" name="key_name" value="{{ $k['name'] ?: $k['id'] }}">
+                                <input type="hidden" name="key_id" value="{{ $k['id'] }}">
                                 <input type="hidden" name="read" value="1">
                                 <input type="hidden" name="write" value="1">
                                 <input type="hidden" name="owner" value="1">

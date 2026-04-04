@@ -17,9 +17,12 @@ class KeyController extends Controller
             $error = 'Could not run `johnny key list`. Ensure sudoers allows the PHP user to run `sudo -u johnny /usr/local/bin/johnny`.';
         }
 
+        $keys = $this->parseKeys($output ?? '');
+
         return view('keys.index', [
             'output' => $output ?? '',
             'error' => $error,
+            'keys' => $keys,
         ]);
     }
 
@@ -47,20 +50,36 @@ class KeyController extends Controller
     public function destroy(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'key_name' => ['required', 'string', 'max:128'],
+            'key_id' => ['required', 'string', 'max:128'],
         ]);
 
         $result = Process::run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
-            'key', 'delete', $validated['key_name'],
+            'key', 'delete', $validated['key_id'],
         ]);
 
         if (! $result->successful()) {
-            return back()->withErrors(['key_name' => $result->errorOutput() ?: $result->output()]);
+            return back()->withErrors(['key_id' => $result->errorOutput() ?: $result->output()]);
         }
 
-        return redirect()->route('keys.index')->with('status', "Key \"{$validated['key_name']}\" deleted.");
+        return redirect()->route('keys.index')->with('status', 'Key deleted.');
+    }
+
+    /**
+     * @return list<array{id: string, name: string}>
+     */
+    private function parseKeys(string $output): array
+    {
+        $keys = [];
+        foreach (explode("\n", $output) as $line) {
+            $line = trim($line);
+            if (preg_match('/^(GK[0-9a-f]+)\s+(.+)$/i', $line, $m)) {
+                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
+            }
+        }
+
+        return $keys;
     }
 
     private function runJohnny(array $args): ?string
