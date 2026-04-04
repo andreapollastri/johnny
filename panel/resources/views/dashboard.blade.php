@@ -3,14 +3,23 @@
 @section('title', 'Dashboard — '.config('app.name'))
 
 @section('content')
-<h1>Dashboard</h1>
-<p class="muted">Manage Garage buckets, objects, and API keys. Configure two-factor authentication under <a href="{{ route('security.show') }}">Security</a>.</p>
-<div class="card">
-    <h2>Quick links</h2>
-    <ul>
-        <li><a href="{{ route('buckets.index') }}">Buckets</a></li>
-        <li><a href="{{ route('keys.index') }}">API keys (CLI)</a></li>
-        <li><a href="{{ route('security.show') }}">Security &amp; 2FA</a></li>
-    </ul>
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p class="subtitle">Manage your Garage S3 storage, API keys, and security settings.</p>
+</div>
+
+<div class="card-grid">
+    <a href="{{ route('buckets.index') }}" class="card card-link">
+        <h2>Buckets</h2>
+        <p class="card-desc text-sm mb-0">Create, browse, and manage S3 buckets and their objects.</p>
+    </a>
+    <a href="{{ route('keys.index') }}" class="card card-link">
+        <h2>API Keys</h2>
+        <p class="card-desc text-sm mb-0">View and create Garage API keys via the CLI.</p>
+    </a>
+    <a href="{{ route('security.show') }}" class="card card-link">
+        <h2>Security</h2>
+        <p class="card-desc text-sm mb-0">Configure two-factor authentication for your account.</p>
+    </a>
 </div>
 @endsection

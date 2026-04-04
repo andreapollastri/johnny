@@ -94,15 +94,19 @@ See `config/caddy-panel.caddy.example` for a Caddy vhost on `panel/public`.
 
 ## Update
 
-After pulling new commits in your clone (e.g. `/opt/johnny`), run **`scripts/update.sh`** as root. It optionally **`git pull --ff-only`** (`--pull`), then does the same **sync to `/usr/local/share/johnny`** as **`scripts/install.sh`** (via **`scripts/lib/sync-johnny-share.sh`**), and if **`panel/artisan`** exists, runs **Composer + Laravel migrate + caches** (same idea as **`install-panel.sh`**, without reinstalling PHP packages). **No numbered migration scripts** are required for 1.0.0 — the **`scripts/migrations/`** directory only holds **`.gitkeep`** until you add optional future scripts.
-
-Check the installed release: **`cat /usr/local/share/johnny/VERSION`**. Tag Git releases with **`v1.0.0`**, **`v1.1.0`**, … alongside **`VERSION`** bumps.
+The repo path is saved at install time in **`/etc/johnny/repo.path`**, so `johnny update` works without arguments:
 
 ```bash
-sudo bash /opt/johnny/scripts/update.sh /opt/johnny --pull
-sudo johnny update /opt/johnny --pull
-# or: sudo JOHNNY_REPO=/opt/johnny johnny update --pull
+sudo johnny update --pull
 ```
+
+This does **`git pull --ff-only`** (when `--pull` is passed), syncs scripts to `/usr/local/share/johnny`, runs **Composer + Laravel migrate + caches** if the panel is present, and finally applies any pending **numbered migration scripts** from `scripts/migrations/`.
+
+A **nightly cron** job (`/etc/cron.d/johnny-nightly`) runs `johnny update --pull` at **02:30** every night, followed by the SFTP backup at **03:00**. Logs go to **`/var/log/johnny-update.log`**.
+
+No migrations are shipped with 1.0.0 — the `scripts/migrations/` directory holds only `.gitkeep`. Future releases can add `NNN_description.sh` scripts there; `update.sh` will execute them once and track state in `/etc/johnny/migrations.state`.
+
+Check the installed release: **`cat /usr/local/share/johnny/VERSION`**.
 
 ## Manual install (without autoinstall)
 
@@ -116,7 +120,7 @@ Configure TLS yourself (see `config/nginx-johnny-s3.conf.example` or `config/cad
 
 ## `johnny` CLI
 
-Besides **`johnny version`** / **`johnny --version`** (prints **`VERSION`** from `/usr/local/share/johnny/VERSION` when installed) and **`sudo johnny update /path/to/repo [--pull]`** (see [Update](#update)), Garage commands pass through:
+Besides **`johnny version`** / **`johnny --version`** (prints **`VERSION`** from `/usr/local/share/johnny/VERSION` when installed) and **`sudo johnny update [--pull]`** (see [Update](#update)), Garage commands pass through:
 
 ```bash
 sudo johnny status

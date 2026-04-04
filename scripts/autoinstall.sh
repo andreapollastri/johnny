@@ -137,13 +137,15 @@ CRON_FILE="/etc/cron.d/johnny-nightly"
 cat > "$CRON_FILE" <<'CRON'
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 SHELL=/bin/bash
+# Nightly self-update (git pull + sync + panel refresh + migrations)
+30 2 * * * root /usr/local/bin/johnny update --pull >> /var/log/johnny-update.log 2>&1
 # Nightly SFTP backup + retention (primary VPS only)
 0 3 * * * root /usr/local/share/johnny/scripts/johnny-nightly-backup.sh >> /var/log/johnny-nightly.log 2>&1
 CRON
 chmod 644 "$CRON_FILE"
 
-touch /var/log/johnny-nightly.log
-chmod 640 /var/log/johnny-nightly.log
+touch /var/log/johnny-nightly.log /var/log/johnny-update.log
+chmod 640 /var/log/johnny-nightly.log /var/log/johnny-update.log
 
 echo
 echo "=== Done ==="

@@ -20,6 +20,9 @@ sync_johnny_share() {
   for f in "${SCRIPT_DIR}/lib"/*.sh; do
     install -m 0755 "$f" "${SHARE}/scripts/lib/$(basename "$f")"
   done
+  for f in "${SCRIPT_DIR}/migrations"/[0-9][0-9][0-9]_*.sh; do
+    install -m 0755 "$f" "${SHARE}/scripts/migrations/$(basename "$f")"
+  done
   shopt -u nullglob
   if [[ -d "${REPO_ROOT}/config" ]]; then
     shopt -s nullglob

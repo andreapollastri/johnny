@@ -277,6 +277,9 @@ def cmd_version() -> None:
         print("Johnny (VERSION not installed — run scripts/install.sh or scripts/update.sh)")
 
 
+REPO_PATH_FILE = Path("/etc/johnny/repo.path")
+
+
 def cmd_update(argv: list[str]) -> None:
     require_root()
     pull = False
@@ -286,9 +289,11 @@ def cmd_update(argv: list[str]) -> None:
             pull = True
         else:
             pos.append(a)
-    repo = pos[0] if pos else os.environ.get("JOHNNY_REPO", "")
+    repo = pos[0] if pos else ""
+    if not repo and REPO_PATH_FILE.is_file():
+        repo = REPO_PATH_FILE.read_text().strip()
     if not repo:
-        die("Usage: sudo johnny update /path/to/johnny [--pull]  (or set JOHNNY_REPO)")
+        die("Repo path unknown. Pass the path or run install.sh first (writes /etc/johnny/repo.path).")
     update_sh = "/usr/local/share/johnny/scripts/update.sh"
     if not os.path.isfile(update_sh):
         candidate = os.path.join(repo, "scripts", "update.sh")
@@ -307,13 +312,13 @@ def print_help() -> None:
 
 Usage:
   johnny version | -V | --version
-  johnny update /path/to/johnny [--pull]   (git pull optional + sync + panel refresh; needs JOHNNY_REPO if no path)
+  johnny update [--pull]                   (git pull optional + sync + panel refresh; path auto-detected from install)
   johnny backup list | create | delete | update | run | set-retention
   johnny <garage-args>...     (passed to garage -c /etc/johnny/garage.toml as user 'johnny')
 
 Examples:
   johnny version
-  sudo johnny update /opt/johnny --pull
+  sudo johnny update --pull
   sudo johnny backup list
   sudo johnny backup create vps-us-abc --host 203.0.113.10 --user backup
   sudo johnny backup set-retention 90

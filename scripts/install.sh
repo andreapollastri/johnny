@@ -86,6 +86,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/sync-johnny-share.sh"
 sync_johnny_share
 
+# Remember where the repo lives so `johnny update` works without arguments.
+echo "$REPO_ROOT" > "${CONFIG_DIR}/repo.path"
+chmod 644 "${CONFIG_DIR}/repo.path"
+
 if [[ ! -f /etc/johnny/backup.json ]] && [[ -f "${REPO_ROOT}/config/backup.json.example" ]]; then
   install -m 0600 "${REPO_ROOT}/config/backup.json.example" /etc/johnny/backup.json
 fi
