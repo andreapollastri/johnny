@@ -4,7 +4,7 @@
 
 - One-shot **autoinstall** (Garage layout, default S3 keys, **Caddy + Let’s Encrypt**, nightly cron).
 - A **`johnny` CLI** that wraps Garage and adds **`johnny backup`** to manage **SFTP backup targets** (IP, port, user, password).
-- Optional **Laravel 13** web panel under `panel/` (**Fortify** login, **2FA**, minimal CSS + vanilla Blade) for buckets, objects, and Garage API keys (via `sudo -u johnny johnny …`).
+- Optional **Laravel 13** web panel under **`panel/`** (**Fortify** login, **2FA**, minimal CSS + vanilla Blade) for buckets, objects, and Garage API keys (via `sudo -u johnny johnny …`).
 - A **nightly job** (primary VPS only) that, for **each** configured target, syncs **every Garage bucket** into a dated tree:
 
   `remote_base_path/YYYY-MM-DD/<bucket-name>/…`
@@ -44,11 +44,11 @@ flowchart TB
 
 ## One-shot autoinstall (recommended)
 
-On a fresh VPS:
+On a fresh VPS, clone **outside `/root`** (e.g. `/opt/johnny`) so the Laravel panel install can run Composer and PHP as `www-data`. A checkout only under `/root/...` is not readable by `www-data` because `/root` is private to root.
 
 ```bash
-git clone <this-repository-url>
-cd johnny
+sudo mkdir -p /opt && sudo git clone https://github.com/andreapollastri/johnny /opt/johnny
+cd /opt/johnny
 sudo bash scripts/autoinstall.sh
 ```
 
@@ -60,7 +60,7 @@ You will be prompted to confirm, then for the **public domain** used for the S3 
 4. Writes **`/etc/caddy/johnny.caddy`** and imports it from `/etc/caddy/Caddyfile` (existing file is backed up).
 5. Creates **`/etc/johnny/backup.json`** with **`retention_days`: 90** and empty **`targets`**.
 6. Installs **`/etc/cron.d/johnny-nightly`** (default **03:00** server time).
-7. Optionally runs **`scripts/install-panel.sh`**, configures **PHP 8.5-FPM** (via `ppa:ondrej/php` on Ubuntu), imports **`/etc/caddy/johnny-panel.caddy`**, and wires **`GARAGE_*`** from `/etc/johnny/credentials/default-s3.env` into `panel/.env`.
+7. Optionally runs **`scripts/install-panel.sh`**, configures **PHP 8.5-FPM** (via `ppa:ondrej/php` on Ubuntu), imports **`/etc/caddy/johnny-panel.caddy`**, and wires **`GARAGE_*`** from `/etc/johnny/credentials/default-s3.env` into **`panel/.env`**.
 
 After install, use your app credentials from:
 
@@ -76,7 +76,7 @@ If you enabled the panel during autoinstall, create the first admin:
 sudo -u www-data php /path/to/johnny/panel/artisan johnny:admin you@example.com 'strong-password'
 ```
 
-Open `https://<panel-hostname>`, sign in, then use **Security** to enable **two-factor authentication** (Fortify TOTP). The panel talks to Garage using **`GARAGE_*`** in `panel/.env` (same access key/secret as `default-s3` unless you change it).
+Open `https://<panel-hostname>`, sign in, then use **Security** to enable **two-factor authentication** (Fortify TOTP). The panel talks to Garage using **`GARAGE_*`** in **`panel/.env`** (same access key/secret as `default-s3` unless you change it).
 
 **API keys (Garage CLI):** the Keys page runs `sudo -u johnny johnny key list`. Install **`config/johnny-panel.sudoers.example`** as `/etc/sudoers.d/johnny-panel` (the autoinstall does this when the panel is installed) so `www-data` may invoke `/usr/local/bin/johnny` as user `johnny`.
 

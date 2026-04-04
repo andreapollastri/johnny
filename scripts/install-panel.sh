@@ -12,7 +12,11 @@ REPO_ROOT="${1:?Usage: $0 /path/to/johnny/repo [APP_URL]}"
 APP_URL="${2:-}"
 
 PANEL_DIR="${REPO_ROOT}/panel"
-[[ -d "$PANEL_DIR" ]] || die "Panel directory not found: $PANEL_DIR"
+[[ -f "${PANEL_DIR}/artisan" ]] || die "Laravel panel not found: $PANEL_DIR (expected panel/artisan)."
+# Composer and artisan run as www-data; /root is not traversable by other users (mode 0700).
+if ! sudo -u www-data bash -c "cd '$PANEL_DIR' && pwd" >/dev/null 2>&1; then
+  die "Panel path is not accessible as user www-data: $PANEL_DIR — clone outside /root (e.g. /opt/johnny) and pass that path to this script."
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -70,6 +74,6 @@ if [[ -f "${REPO_ROOT}/config/johnny-panel.sudoers.example" ]]; then
   visudo -cf /etc/sudoers.d/johnny-panel || die "Invalid sudoers file"
 fi
 
-echo "Panel installed at $PANEL_DIR"
+echo "Laravel panel installed at $PANEL_DIR"
 echo "Next: configure Caddy/nginx (see config/caddy-panel.caddy.example) for $PANEL_DIR/public"
 echo "Create admin: sudo -u www-data php $PANEL_DIR/artisan johnny:admin you@example.com 'strong-password'"

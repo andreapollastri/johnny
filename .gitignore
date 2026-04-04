@@ -1,5 +1,14 @@
+# Johnny
 .env
 **/rclone.conf
 *.log
 config/replication/*.env
 !config/replication/*.example
+
+# Laravel panel (subtree)
+panel/vendor/
+panel/node_modules/
+panel/public/build
+panel/public/hot
+panel/.env
+panel/.phpunit.result.cache
