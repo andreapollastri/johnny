@@ -27,4 +27,6 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/keys', [KeyController::class, 'index'])->name('keys.index');
     Route::post('/keys', [KeyController::class, 'store'])->name('keys.store');
+    Route::post('/keys/allow', [KeyController::class, 'allow'])->name('keys.allow');
+    Route::post('/keys/deny', [KeyController::class, 'deny'])->name('keys.deny');
 });
