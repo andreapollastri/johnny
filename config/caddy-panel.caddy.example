@@ -1,0 +1,9 @@
+# Laravel Johnny panel — replace host and paths; import from /etc/caddy/Caddyfile.
+# Ensure DNS for the panel hostname points to this server (HTTPS via Let’s Encrypt).
+
+panel.example.com {
+    root * /opt/johnny/panel/public
+    encode gzip zstd
+    php_fastcgi unix//run/php/php8.5-fpm.sock
+    file_server
+}

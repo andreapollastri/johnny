@@ -1,0 +1,30 @@
+<?php
+
+use App\Http\Controllers\BucketController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\KeyController;
+use App\Http\Controllers\ObjectController;
+use App\Http\Controllers\SecurityController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/', function () {
+    return redirect()->route('login');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+    Route::get('/security', [SecurityController::class, 'show'])->name('security.show');
+
+    Route::get('/buckets', [BucketController::class, 'index'])->name('buckets.index');
+    Route::post('/buckets', [BucketController::class, 'store'])->name('buckets.store');
+    Route::delete('/buckets/{bucket}', [BucketController::class, 'destroy'])->name('buckets.destroy');
+
+    Route::get('/buckets/{bucket}/objects', [ObjectController::class, 'index'])->name('objects.index');
+    Route::post('/buckets/{bucket}/objects', [ObjectController::class, 'store'])->name('objects.store');
+    Route::get('/buckets/{bucket}/objects/download', [ObjectController::class, 'download'])->name('objects.download');
+    Route::delete('/buckets/{bucket}/objects', [ObjectController::class, 'destroy'])->name('objects.destroy');
+
+    Route::get('/keys', [KeyController::class, 'index'])->name('keys.index');
+    Route::post('/keys', [KeyController::class, 'store'])->name('keys.store');
+});

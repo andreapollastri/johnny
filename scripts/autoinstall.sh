@@ -95,6 +95,33 @@ fi
 systemctl enable caddy
 systemctl restart caddy
 
+echo
+echo "=== Laravel panel (optional) ==="
+PANEL_INSTALLED=0
+read -r -p "Install web panel hostname [panel.${DOMAIN}]: " PANEL_DOMAIN_IN
+PANEL_DOMAIN="${PANEL_DOMAIN_IN:-panel.$DOMAIN}"
+read -r -p "Install Laravel panel now? [y/N] " panel_ok
+if [[ "${panel_ok,,}" == "y" ]]; then
+  PANEL_INSTALLED=1
+  bash "${SCRIPT_DIR}/install-panel.sh" "$REPO_ROOT" "https://${PANEL_DOMAIN}"
+  cat > /etc/caddy/johnny-panel.caddy <<EOF
+${PANEL_DOMAIN} {
+    root * ${REPO_ROOT}/panel/public
+    encode gzip zstd
+    php_fastcgi unix//run/php/php8.5-fpm.sock
+    file_server
+}
+EOF
+  if [[ -f /etc/caddy/Caddyfile ]] && ! grep -q 'import /etc/caddy/johnny-panel.caddy' /etc/caddy/Caddyfile; then
+    echo "" >> /etc/caddy/Caddyfile
+    echo "import /etc/caddy/johnny-panel.caddy" >> /etc/caddy/Caddyfile
+  fi
+  systemctl restart php8.5-fpm
+  systemctl reload caddy
+  echo "Panel URL: https://${PANEL_DOMAIN}"
+  echo "Create admin: sudo -u www-data php ${REPO_ROOT}/panel/artisan johnny:admin your@email.com 'password'"
+fi
+
 if [[ ! -f /etc/johnny/backup.json ]]; then
   install -m 0600 /dev/stdin /etc/johnny/backup.json <<'JSON'
 {
@@ -126,3 +153,6 @@ echo "Internal backup key file: /etc/johnny/credentials/backup-internal-s3.env"
 echo "Manage SFTP backups: sudo johnny backup list | create | delete | update | run"
 echo "Retention (days): sudo johnny backup set-retention 90"
 echo "Logs: /var/log/johnny-nightly.log"
+if [[ "${PANEL_INSTALLED:-0}" -eq 1 ]]; then
+  echo "Web panel: https://${PANEL_DOMAIN}"
+fi

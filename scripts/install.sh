@@ -86,7 +86,7 @@ install -m 0755 "${SCRIPT_DIR}/johnny.py" "${INSTALL_PREFIX}/bin/johnny"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SHARE="/usr/local/share/johnny"
 install -d -m 0755 "${SHARE}/scripts" "${SHARE}/config"
-for f in bootstrap-single-node.sh install-rclone.sh backup-replicate.sh replicate-run.sh autoinstall.sh johnny-nightly-backup.sh johnny-nightly-backup.py; do
+for f in bootstrap-single-node.sh install-rclone.sh backup-replicate.sh replicate-run.sh autoinstall.sh install-panel.sh johnny-nightly-backup.sh johnny-nightly-backup.py; do
   if [[ -f "${SCRIPT_DIR}/${f}" ]]; then
     install -m 0755 "${SCRIPT_DIR}/${f}" "${SHARE}/scripts/${f}"
   fi

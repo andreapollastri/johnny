@@ -1,0 +1,4 @@
+# Install to /etc/sudoers.d/johnny-panel (chmod 440) so the PHP-FPM user can run Garage CLI as johnny.
+# Adjust www-data if your distro uses nginx/php-fpm with another user.
+
+www-data ALL=(johnny) NOPASSWD: /usr/local/bin/johnny
