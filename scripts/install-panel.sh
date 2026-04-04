@@ -32,11 +32,15 @@ if ! command -v composer >/dev/null 2>&1; then
   php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
 fi
 
-install -d -o www-data -g www-data -m 0755 "$PANEL_DIR/bootstrap/cache"
-install -d -o www-data -g www-data -m 0755 "$PANEL_DIR/storage" "$PANEL_DIR/storage/framework" "$PANEL_DIR/storage/framework/sessions" "$PANEL_DIR/storage/framework/views" "$PANEL_DIR/storage/framework/cache" "$PANEL_DIR/storage/logs"
-chown -R www-data:www-data "$PANEL_DIR/storage" "$PANEL_DIR/bootstrap/cache"
+install -d -m 0755 "$PANEL_DIR/bootstrap/cache"
+install -d -m 0755 "$PANEL_DIR/storage" "$PANEL_DIR/storage/framework" "$PANEL_DIR/storage/framework/sessions" "$PANEL_DIR/storage/framework/views" "$PANEL_DIR/storage/framework/cache" "$PANEL_DIR/storage/logs"
 
-sudo -u www-data composer install --no-dev --optimize-autoloader --no-interaction --working-dir="$PANEL_DIR"
+# Git 2.35+ blocks git in repos whose owner differs from the current user (Composer may call git).
+git config --global --add safe.directory "$REPO_ROOT"
+
+# Run Composer as root so it can create panel/vendor on a root-owned clone; then hand off to www-data.
+composer install --no-dev --optimize-autoloader --no-interaction --working-dir="$PANEL_DIR"
+chown -R www-data:www-data "$PANEL_DIR"
 
 if [[ ! -f "$PANEL_DIR/.env" ]]; then
   sudo -u www-data cp "$PANEL_DIR/.env.example" "$PANEL_DIR/.env"

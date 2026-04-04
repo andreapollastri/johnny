@@ -86,6 +86,8 @@ Open `https://<panel-hostname>`, sign in, then use **Security** to enable **two-
 sudo bash scripts/install-panel.sh /path/to/johnny/repo https://panel.example.com
 ```
 
+The install script registers the clone as a **Git safe directory** (for Git ≥ 2.35), runs **Composer as root** so `panel/vendor` can be created on a root-owned tree, then **`chown`s `panel/` to `www-data`**. If you install dependencies by hand: add `git config --global --add safe.directory /path/to/johnny`, run Composer from a user that can write `panel/`, or use the same root-then-chown pattern.
+
 See `config/caddy-panel.caddy.example` for a Caddy vhost on `panel/public`.
 
 ## Manual install (without autoinstall)
