@@ -274,7 +274,6 @@ code {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
-  margin-bottom: 1.5rem;
 }
 .stat-card {
   display: flex;

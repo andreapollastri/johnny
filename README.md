@@ -1,52 +1,63 @@
 # Johnny
 
-**Version 1.0.0** — see the [`VERSION`](VERSION) file. Future releases bump SemVer there. **Install** is driven by **`scripts/install.sh`**, **`scripts/autoinstall.sh`**, and **`scripts/install-panel.sh`**; **`scripts/update.sh`** repeats the same sync + panel refresh after a `git pull`. Optional numbered scripts under **`scripts/migrations/`** are reserved for the future (folder kept with **`.gitkeep`** only for now).
+**Self-hosted S3-compatible object storage, automated backups, and an elegant web panel — in one install.**
 
-**Johnny** packages [Garage](https://garagehq.deuxfleurs.fr/) for **Ubuntu 24.04 LTS** with:
+Johnny wraps [Garage](https://garagehq.deuxfleurs.fr/) with production-ready automation: TLS via Caddy, nightly SFTP backups with retention, a `johnny` CLI, and an optional Laravel web panel with two-factor authentication.
 
-- One-shot **autoinstall** (Garage layout, default S3 keys, **Caddy + Let’s Encrypt**, nightly cron).
-- A **`johnny` CLI** that wraps Garage and adds **`johnny backup`** to manage **SFTP backup targets** (IP, port, user, password).
-- Optional **Laravel 13** web panel under **`panel/`** (**Fortify** login, **2FA**, minimal CSS + vanilla Blade) for buckets, objects, and Garage API keys (via `sudo -u johnny johnny …`).
-- A **nightly job** (primary VPS only) that, for **each** configured target, syncs **every Garage bucket** into a dated tree:
+> **Current release:** see [`VERSION`](VERSION) &middot; **License:** [MIT](LICENSE)
 
-  `remote_base_path/YYYY-MM-DD/<bucket-name>/…`
+---
 
-  then **deletes** dated folders older than **`retention_days`** (default **90**).
+## Key Features
 
-The storage engine is still upstream **Garage** (`garage` binary). Johnny adds paths under `/etc/johnny` and `/var/lib/johnny`, region **`johnny`**, and automation around backups and TLS.
+| | |
+|---|---|
+| **S3-compatible storage** | Powered by Garage — use any AWS SDK, `aws` CLI, or S3 client |
+| **One-command install** | Single script sets up Garage, Caddy (Let's Encrypt TLS), rclone, cron |
+| **Automated SFTP backups** | Nightly sync of every bucket to one or more remote servers, with configurable retention |
+| **Web panel** | Laravel-based dashboard for buckets, objects, and API keys (optional) |
+| **Two-factor auth** | TOTP 2FA + password reset via SMTP on the web panel |
+| **Self-updating** | Nightly cron pulls the latest release, runs migrations, and refreshes the panel |
 
-## How it fits together
+---
+
+## Architecture
 
 ```mermaid
 flowchart TB
   subgraph primary [Primary VPS]
-    G[Garage S3 API]
-    C[Caddy TLS]
-    CRON[Cron nightly]
+    G[Garage S3 API :3900]
+    C[Caddy — HTTPS :443]
+    P[Web Panel — Laravel]
+    CRON[Nightly Cron]
     G --> C
-    CRON --> RCLONE[rclone sync]
+    CRON --> RCLONE[rclone SFTP sync]
   end
-  subgraph targets [Backup servers SFTP :22]
-    T1[vps-us]
-    T2[vps-eu]
+  subgraph targets [Backup Servers — SFTP]
+    T1[server-1]
+    T2[server-2]
   end
   RCLONE --> T1
   RCLONE --> T2
 ```
 
-- **Orchestration runs only on the primary VPS** (push). Backup servers only need SSH/SFTP and disk; they do **not** need Garage unless you also use them for something else.
-- **Default S3 credentials** for applications are written to `/etc/johnny/credentials/default-s3.env` during autoinstall.
-- **Internal** credentials for the nightly job (`johnny-backup` key) live in `/etc/johnny/credentials/backup-internal-s3.env` (local `http://127.0.0.1:3900` only).
+- **Orchestration runs only on the primary VPS** (push model). Backup servers only need SSH/SFTP and disk space.
+- Default S3 credentials for applications are stored in `/etc/johnny/credentials/default-s3.env`.
+- An internal backup key (`johnny-backup`) lives in `/etc/johnny/credentials/backup-internal-s3.env` and is scoped to local `http://127.0.0.1:3900`.
+
+---
 
 ## Requirements
 
-- Ubuntu **24.04** on the primary VPS.
-- **DNS** pointing your chosen hostname to this server **before** autoinstall (Let’s Encrypt must validate the domain).
-- For each backup host: **SSH/SFTP** reachable from the primary (port configurable, default **22**), with a user that can write under your chosen remote path (default base folder: `johnny-backups` on the SFTP home or as resolved by the server).
+- **Ubuntu 24.04 LTS** on the primary VPS
+- **DNS** `A`/`AAAA` record pointing your chosen hostname to the server **before** installation (Let's Encrypt needs to validate the domain)
+- For each backup target: **SSH/SFTP** reachable from the primary, with a user that can write under the remote path
 
-## One-shot autoinstall (recommended)
+---
 
-On a fresh VPS, clone **outside `/root`** (e.g. `/opt/johnny`) so the Laravel panel install can run Composer and PHP as `www-data`. A checkout only under `/root/...` is not readable by `www-data` because `/root` is private to root.
+## Quick Start (Autoinstall)
+
+Clone **outside `/root`** (e.g. `/opt/johnny`) so the Laravel panel can run as `www-data`:
 
 ```bash
 sudo mkdir -p /opt && sudo git clone https://github.com/andreapollastri/johnny /opt/johnny
@@ -54,61 +65,26 @@ cd /opt/johnny
 sudo bash scripts/autoinstall.sh
 ```
 
-You will be prompted to confirm, then for the **public domain** used for the S3 HTTPS endpoint (e.g. `storage.example.com`). Optionally, you can install the **Laravel panel** on another hostname (default `panel.<your-s3-domain>`). The script:
+The interactive wizard will:
 
-1. Installs dependencies (**python3**, **caddy**, **rclone**, …) and runs `scripts/install.sh`.
-2. Starts Garage, runs **single-node layout** (`bootstrap-single-node.sh`).
-3. Creates bucket **`default`**, API keys **`johnny-default`** (for apps) and **`johnny-backup`** (for nightly sync), and writes env files under `/etc/johnny/credentials/`.
-4. Writes **`/etc/caddy/johnny.caddy`** and imports it from `/etc/caddy/Caddyfile` (existing file is backed up).
-5. Creates **`/etc/johnny/backup.json`** with **`retention_days`: 90** and empty **`targets`**.
-6. Installs **`/etc/cron.d/johnny-nightly`** (default **03:00** server time).
-7. Optionally runs **`scripts/install-panel.sh`**, configures **PHP 8.5-FPM** (via `ppa:ondrej/php` on Ubuntu), imports **`/etc/caddy/johnny-panel.caddy`**, and wires **`GARAGE_*`** from `/etc/johnny/credentials/default-s3.env` into **`panel/.env`**.
+1. Install dependencies (Python 3, Caddy, rclone, …) and run `scripts/install.sh`
+2. Start Garage and bootstrap a single-node layout
+3. Create bucket `default`, API keys `johnny-default` (apps) and `johnny-backup` (nightly sync), and write env files under `/etc/johnny/credentials/`
+4. Configure **Caddy** with automatic TLS for your S3 domain
+5. Create `/etc/johnny/backup.json` (retention: 90 days, empty targets)
+6. Install `/etc/cron.d/johnny-nightly` (self-update at 02:30, backup at 03:00)
+7. Optionally install the **web panel** (PHP 8.5-FPM, Composer, Laravel migrate, Caddy vhost)
 
-After install, use your app credentials from:
-
-`source /etc/johnny/credentials/default-s3.env`
-
-Then e.g. `aws s3 ls` with `AWS_ENDPOINT_URL` set to `https://your-domain`.
-
-### Web panel (Laravel)
-
-If you enabled the panel during autoinstall, create the first admin:
+Once complete, load your app credentials:
 
 ```bash
-sudo -u www-data php /path/to/johnny/panel/artisan johnny:admin you@example.com 'strong-password'
+source /etc/johnny/credentials/default-s3.env
+aws s3 ls --endpoint-url "$AWS_ENDPOINT_URL"
 ```
 
-Open `https://<panel-hostname>`, sign in, then use **Security** to enable **two-factor authentication** (Fortify TOTP). The panel talks to Garage using **`GARAGE_*`** in **`panel/.env`** (same access key/secret as `default-s3` unless you change it).
+---
 
-**API keys (Garage CLI):** the Keys page runs `sudo -u johnny johnny key list`. Install **`config/johnny-panel.sudoers.example`** as `/etc/sudoers.d/johnny-panel` (the autoinstall does this when the panel is installed) so `www-data` may invoke `/usr/local/bin/johnny` as user `johnny`.
-
-**Manual panel install** (if you did not use autoinstall):
-
-```bash
-sudo bash scripts/install-panel.sh /path/to/johnny/repo https://panel.example.com
-```
-
-The install script registers the clone as a **Git safe directory** (for Git ≥ 2.35), runs **Composer as root** so `panel/vendor` can be created on a root-owned tree, then **`chown`s `panel/` to `www-data`**, and sets **`COMPOSER_ALLOW_SUPERUSER=1`** for non-interactive Composer. It uses a **`run_wwwdata` helper** so redirects and temp files are never created by root while targeting `panel/` (a root-owned `>` after `sudo -u www-data` breaks `.env` updates). If you install dependencies by hand: add `git config --global --add safe.directory /path/to/johnny`, run Composer from a user that can write `panel/`, or use the same root-then-chown pattern.
-
-See `config/caddy-panel.caddy.example` for a Caddy vhost on `panel/public`.
-
-## Update
-
-The repo path is saved at install time in **`/etc/johnny/repo.path`**, so `johnny update` works without arguments:
-
-```bash
-sudo johnny update --pull
-```
-
-This does **`git pull --ff-only`** (when `--pull` is passed), syncs scripts to `/usr/local/share/johnny`, runs **Composer + Laravel migrate + caches** if the panel is present, and finally applies any pending **numbered migration scripts** from `scripts/migrations/`.
-
-A **nightly cron** job (`/etc/cron.d/johnny-nightly`) runs `johnny update --pull` at **02:30** every night, followed by the SFTP backup at **03:00**. Logs go to **`/var/log/johnny-update.log`**.
-
-No migrations are shipped with 1.0.0 — the `scripts/migrations/` directory holds only `.gitkeep`. Future releases can add `NNN_description.sh` scripts there; `update.sh` will execute them once and track state in `/etc/johnny/migrations.state`.
-
-Check the installed release: **`cat /usr/local/share/johnny/VERSION`**.
-
-## Manual install (without autoinstall)
+## Manual Install (Without Autoinstall)
 
 ```bash
 sudo bash scripts/install.sh
@@ -116,66 +92,204 @@ sudo systemctl start johnny-garage
 sudo bash scripts/bootstrap-single-node.sh
 ```
 
-Configure TLS yourself (see `config/nginx-johnny-s3.conf.example` or `config/caddy-johnny.caddy.example`). Create `/etc/johnny/credentials/*.env` and keys with `sudo -u johnny johnny key create …` as needed.
+Then configure TLS yourself — see `config/caddy-johnny.caddy.example` or `config/nginx-johnny-s3.conf.example`. Create credentials and keys with `sudo -u johnny johnny key create …` as needed.
 
-## `johnny` CLI
+---
 
-Besides **`johnny version`** / **`johnny --version`** (prints **`VERSION`** from `/usr/local/share/johnny/VERSION` when installed) and **`sudo johnny update [--pull]`** (see [Update](#update)), Garage commands pass through:
+## Web Panel
+
+The optional Laravel panel provides a browser-based interface to manage **buckets**, **objects**, and **Garage API keys**.
+
+### Install the Panel
+
+If you chose to skip the panel during autoinstall, you can add it later:
 
 ```bash
-sudo johnny status
-sudo johnny bucket list
-sudo -u johnny johnny bucket create my-bucket
+sudo bash scripts/install-panel.sh /opt/johnny https://panel.example.com
 ```
 
-Backup targets (SFTP) — **run as root**:
+The script installs PHP 8.5-FPM, Composer, runs Laravel migrations and caches, and wires the Garage credentials from `/etc/johnny/credentials/default-s3.env` into `panel/.env`.
 
-| Command                              | Description                                                                                            |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `sudo johnny backup list`            | List targets and show retention / remote base path                                                     |
-| `sudo johnny backup create NAME`     | Interactive prompts for host, port, user, password (or use `--host`, `--port`, `--user`, `--password`) |
-| `sudo johnny backup delete NAME`     | Remove a target                                                                                        |
-| `sudo johnny backup update NAME`     | Change fields; use `-p` to prompt for a new password                                                   |
-| `sudo johnny backup set-retention N` | Keep dated folders not older than **N** days (default **90**)                                          |
-| `sudo johnny backup run`             | Run the same job as cron immediately                                                                   |
+See `config/caddy-panel.caddy.example` for the Caddy vhost configuration.
 
-Configuration file: **`/etc/johnny/backup.json`** (mode `600`). Passwords are stored **in plain text** — protect this file. You can edit **`remote_base_path`** here (default **`johnny-backups`**, created under the SFTP user’s home unless the server chroots elsewhere).
+### Create an Admin User
 
-### Remote layout after backups
+```bash
+sudo -u www-data php /opt/johnny/panel/artisan johnny:admin you@example.com 'strong-password'
+```
 
-On each SFTP target you should see folders like:
+Open `https://<panel-hostname>` and sign in. Go to **Security** to enable **two-factor authentication** (TOTP).
+
+### API Keys via the Panel
+
+The Keys page calls `sudo -u johnny johnny key list` under the hood. The sudoers rule is installed automatically during autoinstall; for manual installs, copy the example:
+
+```bash
+sudo install -m 0440 config/johnny-panel.sudoers.example /etc/sudoers.d/johnny-panel
+```
+
+---
+
+## Configuring SMTP for Password Reset
+
+By default the panel uses `MAIL_MAILER=log`, which means outbound emails (including password-reset links) are **not sent** — they are only written to the Laravel log.
+
+To enable real email delivery, edit `panel/.env` and set the SMTP variables:
+
+```dotenv
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=your-smtp-user@example.com
+MAIL_PASSWORD=your-smtp-password
+MAIL_SCHEME=tls
+MAIL_FROM_ADDRESS=noreply@yourdomain.com
+MAIL_FROM_NAME="Johnny Panel"
+```
+
+Then rebuild the config cache:
+
+```bash
+sudo -u www-data php /opt/johnny/panel/artisan config:cache
+```
+
+**Common SMTP providers:**
+
+| Provider | Host | Port | Scheme |
+|---|---|---|---|
+| **Mailgun** | `smtp.mailgun.org` | 587 | tls |
+| **Amazon SES** | `email-smtp.<region>.amazonaws.com` | 587 | tls |
+| **Brevo (Sendinblue)** | `smtp-relay.brevo.com` | 587 | tls |
+| **Postmark** | `smtp.postmarkapp.com` | 587 | tls |
+| **Gmail** | `smtp.gmail.com` | 587 | tls |
+| **Generic SMTP** | your provider's host | 465 (ssl) / 587 (tls) | ssl / tls |
+
+Once configured, users can click **"Forgot your password?"** on the login page and receive a reset link via email.
+
+---
+
+## Updating
+
+The repo path is saved during install in `/etc/johnny/repo.path`, so updates work without arguments:
+
+```bash
+sudo johnny update --pull
+```
+
+This does:
+
+1. `git pull --ff-only` (when `--pull` is passed)
+2. Sync scripts to `/usr/local/share/johnny`
+3. `composer install` + `artisan migrate` + cache rebuild (if the panel is present)
+4. Execute any pending numbered migration scripts from `scripts/migrations/`
+
+A **nightly cron** (`/etc/cron.d/johnny-nightly`) runs `johnny update --pull` at **02:30** and the SFTP backup at **03:00**. Logs: `/var/log/johnny-update.log`.
+
+Check the installed version:
+
+```bash
+cat /usr/local/share/johnny/VERSION
+```
+
+---
+
+## `johnny` CLI Reference
+
+### General
+
+```bash
+sudo johnny version          # Print installed version
+sudo johnny status           # Garage cluster status
+sudo johnny update [--pull]  # Update (see above)
+```
+
+### Buckets & Keys (Garage passthrough)
+
+```bash
+sudo johnny bucket list
+sudo -u johnny johnny bucket create my-bucket
+sudo johnny key list
+sudo -u johnny johnny key create my-key
+```
+
+### Backup Targets (SFTP)
+
+| Command | Description |
+|---|---|
+| `sudo johnny backup list` | List targets, retention, remote base path |
+| `sudo johnny backup create NAME` | Add a target (interactive or with `--host`, `--port`, `--user`, `--password`) |
+| `sudo johnny backup delete NAME` | Remove a target |
+| `sudo johnny backup update NAME` | Update fields; use `-p` to prompt for a new password |
+| `sudo johnny backup set-retention N` | Keep dated folders for N days (default 90) |
+| `sudo johnny backup run` | Run the backup job immediately |
+
+Configuration: `/etc/johnny/backup.json` (mode `600`). Passwords are stored in plain text — protect this file.
+
+### Remote Layout After Backups
 
 ```text
 johnny-backups/
-  2026-01-23/
+  2026-04-03/
     default/
     my-bucket/
-  2026-01-24/
+  2026-04-04/
     default/
     my-bucket/
 ```
 
-Older date folders are removed when **`date < today - retention_days`**.
+Date folders older than `retention_days` are automatically removed.
 
-## Nightly job details
+---
 
-- Implemented in **`scripts/johnny-nightly-backup.py`** (installed under `/usr/local/share/johnny/scripts/`).
-- Uses **rclone** to sync `johnny_local:<bucket>` → `sftp:<remote>:<base>/<date>/<bucket>/`.
-- Ensures key **`johnny-backup`** has **read** permission on every bucket before syncing (best-effort `bucket allow`).
-- **Retention** uses the dates in folder names (`YYYY-MM-DD`) under `remote_base_path`.
+## Nightly Backup Details
 
-Logs: **`/var/log/johnny-nightly.log`**.
+- Implemented in `scripts/johnny-nightly-backup.py` (installed to `/usr/local/share/johnny/scripts/`)
+- Uses **rclone** to sync `johnny_local:<bucket>` to `sftp:<remote>:<base>/<date>/<bucket>/`
+- Ensures key `johnny-backup` has read permission on every bucket before syncing
+- Retention is date-based: folders named `YYYY-MM-DD` older than `retention_days` are deleted
 
-## Security notes
+Logs: `/var/log/johnny-nightly.log`
 
-- Restrict **`/etc/johnny`** (especially `backup.json` and `credentials/`).
-- Prefer **SSH keys** on backup servers in the long term; Johnny currently documents **password** auth for simplicity.
-- Firewall: expose **443** (and **80** if needed for ACME), **22** only from trusted IPs where possible.
-- `rclone sync` can **delete** extra files on the destination under each dated prefix; read the [rclone sync](https://rclone.org/commands/rclone_sync/) docs.
+---
 
-## Optional: S3-to-S3 replication
+## S3-to-S3 Replication (Optional)
 
-Older scripts **`backup-replicate.sh`** and **`replicate-run.sh`** remain for Garage-to-Garage replication over **S3**, if you still want that in addition to SFTP backups.
+For Garage-to-Garage replication over S3 (in addition to SFTP backups), use the included scripts:
+
+```bash
+# Configure a replication env (see config/replication/media-to-eu.env.example)
+cp config/replication/media-to-eu.env.example config/replication/media-to-eu.env
+# Edit with your remote Garage credentials, then run:
+sudo bash scripts/replicate-run.sh config/replication/media-to-eu.env
+```
+
+---
+
+## Security Notes
+
+- Restrict `/etc/johnny` (especially `backup.json` and `credentials/`) — default permissions are already `600`/`700`
+- Prefer **SSH keys** on backup servers for production use; Johnny documents password auth for simplicity
+- Firewall: expose **443** (and **80** for ACME) only; restrict **22** to trusted IPs where possible
+- `rclone sync` can delete extra files on the destination under each dated prefix — see the [rclone sync docs](https://rclone.org/commands/rclone_sync/)
+
+---
+
+## Configuration Reference
+
+| File | Purpose |
+|---|---|
+| `/etc/johnny/garage.toml` | Garage configuration |
+| `/etc/johnny/backup.json` | Backup targets and retention |
+| `/etc/johnny/credentials/default-s3.env` | App S3 credentials |
+| `/etc/johnny/credentials/backup-internal-s3.env` | Internal backup S3 credentials |
+| `/etc/johnny/repo.path` | Path to the Johnny repo (for updates) |
+| `/etc/johnny/migrations.state` | Last applied migration number |
+| `/etc/cron.d/johnny-nightly` | Cron schedule |
+| `panel/.env` | Laravel panel environment |
+
+Example configs are in the `config/` directory of this repository.
+
+---
 
 ## License
 
