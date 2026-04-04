@@ -68,7 +68,7 @@ class KeyController extends Controller
         $result = Process::run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
-            'key', 'delete', $validated['key_id'],
+            'key', 'delete', '--yes', $validated['key_id'],
         ]);
 
         if (! $result->successful()) {
@@ -103,7 +103,10 @@ class KeyController extends Controller
         $keys = [];
         foreach (explode("\n", $output) as $line) {
             $line = trim($line);
-            if (preg_match('/^(GK[0-9a-f]+)\s+(.+)$/i', $line, $m)) {
+            // Format: "GKxxxx  2026-04-04  key-name  never" or "GKxxxx  key-name"
+            if (preg_match('/^(GK[0-9a-f]+)\s+\d{4}-\d{2}-\d{2}\s+(\S+)/i', $line, $m)) {
+                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
+            } elseif (preg_match('/^(GK[0-9a-f]+)\s+(\S+)/i', $line, $m)) {
                 $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
             }
         }

@@ -111,10 +111,10 @@ class BucketController extends Controller
             return back()->withErrors(['error' => "The \"{$bucket}\" bucket is protected and cannot be deleted."]);
         }
 
-        $result = Process::input($bucket."\n")->run([
+        $result = Process::run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
-            'bucket', 'delete', $bucket,
+            'bucket', 'delete', '--yes', $bucket,
         ]);
 
         if (! $result->successful()) {
@@ -137,7 +137,7 @@ class BucketController extends Controller
             return back()->withErrors(['key_id' => 'Select at least one permission.'])->withInput();
         }
 
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'allow'];
+        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'allow', '--yes'];
         if ($request->boolean('read')) {
             $cmd[] = '--read';
         }
@@ -174,7 +174,7 @@ class BucketController extends Controller
             return back()->withErrors(['key_id' => 'Select at least one permission to revoke.'])->withInput();
         }
 
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'deny'];
+        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'deny', '--yes'];
         if ($request->boolean('read')) {
             $cmd[] = '--read';
         }
@@ -250,7 +250,10 @@ class BucketController extends Controller
         $keys = [];
         foreach (explode("\n", $result->output()) as $line) {
             $line = trim($line);
-            if (preg_match('/^(GK[0-9a-f]+)\s+(.+)$/i', $line, $m)) {
+            // Format: "GKxxxx  2026-04-04  key-name  never" or "GKxxxx  key-name"
+            if (preg_match('/^(GK[0-9a-f]+)\s+\d{4}-\d{2}-\d{2}\s+(\S+)/i', $line, $m)) {
+                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
+            } elseif (preg_match('/^(GK[0-9a-f]+)\s+(\S+)/i', $line, $m)) {
                 $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
             }
         }
@@ -263,7 +266,7 @@ class BucketController extends Controller
         Process::run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
-            'bucket', 'allow', '--read', '--write', '--owner', $bucket, '--key', $keyName,
+            'bucket', 'allow', '--yes', '--read', '--write', '--owner', $bucket, '--key', $keyName,
         ]);
     }
 }
