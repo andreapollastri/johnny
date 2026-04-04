@@ -16,6 +16,7 @@ Johnny wraps [Garage](https://garagehq.deuxfleurs.fr/) with production-ready aut
 | **One-command install** | Single script sets up Garage, Caddy (Let's Encrypt TLS), rclone, cron |
 | **Automated SFTP backups** | Nightly sync of every bucket to one or more remote servers, with configurable retention |
 | **Web panel** | Laravel-based dashboard for buckets, objects, and API keys (optional) |
+| **Provisioning API** | Authenticated HTTP endpoint to create a bucket, a dedicated Garage key, and return S3 connection details (optional panel) |
 | **Two-factor auth** | TOTP 2FA + password reset via SMTP on the web panel |
 | **Self-updating** | Nightly cron pulls the latest release, runs migrations, and refreshes the panel |
 
@@ -127,6 +128,62 @@ The Keys page calls `sudo -u johnny johnny key list` under the hood. The sudoers
 ```bash
 sudo install -m 0440 config/johnny-panel.sudoers.example /etc/sudoers.d/johnny-panel
 ```
+
+### Provisioning API
+
+When the panel is installed, it exposes a **JSON API** to provision a new Garage bucket together with a fresh S3 key scoped to that bucket. This is useful for automation (onboarding tenants, CI, internal tools) without logging into the UI for each bucket.
+
+**Authentication:** [Laravel Sanctum](https://laravel.com/docs/sanctum) personal access tokens. Create a token in the panel under **Security → Panel API tokens**, or issue one from the server:
+
+```bash
+sudo -u www-data php /opt/johnny/panel/artisan johnny:api-token you@example.com --name=provisioning
+```
+
+Send the token on every request:
+
+```http
+Authorization: Bearer <your-token>
+Accept: application/json
+```
+
+**Endpoint:** `POST /api/buckets/provision`  
+Use your panel base URL, for example `https://panel.example.com/api/buckets/provision`.
+
+**Request body (JSON, optional):**
+
+| Field | Type | Description |
+|---|---|---|
+| `bucket` | string, optional | Bucket name. Must match `^[a-z0-9][a-z0-9._-]{1,254}$`. If omitted, a unique name is generated (prefix `b-` plus random hex). |
+
+Example body: `{}` or `{"bucket":"my-tenant-data"}`.
+
+**Success (HTTP 201):** the response is a JSON object including:
+
+| Field | Description |
+|---|---|
+| `bucket` | Created bucket name |
+| `region` | From `GARAGE_DEFAULT_REGION` in `panel/.env` (default `johnny`) |
+| `endpoint` | Public S3 URL from `GARAGE_ENDPOINT` (same as app-facing HTTPS endpoint) |
+| `path_style` | `true` — use path-style addressing for S3 clients |
+| `key_name` | Garage key name (`bucket-` plus random hex) |
+| `credentials` | `access_key_id` and `secret_access_key` for S3 |
+| `env` | Convenience map: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` |
+
+The server creates the bucket, creates the key, grants that key read/write/owner on the bucket, and grants the panel’s Garage key (`GARAGE_KEY_NAME`, default `johnny-default`) full access so the UI can manage the bucket.
+
+**Errors:** validation failures return **422** with `message` and `detail`. Other failures may return **422** (bucket creation) or **500** (key creation or permission steps) with a JSON body describing the problem.
+
+**Example:**
+
+```bash
+curl -sS -X POST "https://panel.example.com/api/buckets/provision" \
+  -H "Authorization: Bearer YOUR_SANCTUM_TOKEN" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"customer-orders"}'
+```
+
+**Requirements:** the panel database must include Sanctum’s `personal_access_tokens` table (run `php artisan migrate` after upgrades). PHP must be allowed to run `sudo -u johnny /usr/local/bin/johnny` as for the rest of the panel (see **API Keys via the Panel** above).
 
 ---
 
