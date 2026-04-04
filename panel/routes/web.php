@@ -15,6 +15,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     Route::get('/security', [SecurityController::class, 'show'])->name('security.show');
+    Route::post('/security/tokens', [SecurityController::class, 'storeToken'])->name('security.tokens.store');
+    Route::delete('/security/tokens/{tokenId}', [SecurityController::class, 'destroyToken'])->whereNumber('tokenId')->name('security.tokens.destroy');
 
     Route::get('/buckets', [BucketController::class, 'index'])->name('buckets.index');
     Route::post('/buckets', [BucketController::class, 'store'])->name('buckets.store');

@@ -10,6 +10,7 @@
         "aws/aws-sdk-php": "^3.376",
         "laravel/fortify": "^1.36",
         "laravel/framework": "^13.0",
+        "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0"
     },
     "require-dev": {

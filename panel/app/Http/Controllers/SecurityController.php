@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class SecurityController extends Controller
@@ -10,8 +12,42 @@ class SecurityController extends Controller
      * Two-factor setup: Fortify exposes POST /user/two-factor-authentication (after password confirm)
      * and GET /user/two-factor-qr-code for the SVG. This page links to those flows.
      */
-    public function show(): View
+    public function show(Request $request): View
     {
-        return view('security');
+        $tokens = $request->user()
+            ->tokens()
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('security', compact('tokens'));
+    }
+
+    public function storeToken(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+        ]);
+
+        $plainTextToken = $request->user()->createToken($validated['name'])->plainTextToken;
+
+        return redirect()
+            ->route('security.show')
+            ->with('status', 'API token created.')
+            ->with('sanctum_token_plain', $plainTextToken);
+    }
+
+    public function destroyToken(Request $request, int $tokenId): RedirectResponse
+    {
+        $deleted = $request->user()->tokens()->where('id', $tokenId)->delete();
+
+        if ($deleted === 0) {
+            return redirect()
+                ->route('security.show')
+                ->withErrors(['token' => 'Token not found.']);
+        }
+
+        return redirect()
+            ->route('security.show')
+            ->with('status', 'API token revoked.');
     }
 }
