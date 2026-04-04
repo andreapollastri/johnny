@@ -100,6 +100,7 @@ else
 fi
 
 echo
+SHARE="${INSTALL_PREFIX}/share/johnny"
 echo "Install finished. Next steps:"
 echo "  A) Full setup (HTTPS, default keys, cron): sudo bash ${SHARE}/scripts/autoinstall.sh"
 echo "  B) Manual: systemctl start johnny-garage && sudo bash ${SHARE}/scripts/bootstrap-single-node.sh"

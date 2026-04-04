@@ -274,7 +274,7 @@ def cmd_version() -> None:
     if VERSION_FILE.is_file():
         print(f"Johnny {VERSION_FILE.read_text().strip()}")
     else:
-        print("Johnny (VERSION not installed — run install.sh or migration 001 / update)")
+        print("Johnny (VERSION not installed — run scripts/install.sh or scripts/update.sh)")
 
 
 def cmd_update(argv: list[str]) -> None:
