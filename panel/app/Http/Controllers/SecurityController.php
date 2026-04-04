@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Laravel\Fortify\Fortify;
 
 class SecurityController extends Controller
 {
@@ -14,12 +15,19 @@ class SecurityController extends Controller
      */
     public function show(Request $request): View
     {
-        $tokens = $request->user()
+        $user = $request->user();
+
+        $tokens = $user
             ->tokens()
             ->orderByDesc('created_at')
             ->get();
 
-        return view('security', compact('tokens'));
+        $twoFactorManualSecret = null;
+        if ($user->two_factor_secret && ! $user->hasEnabledTwoFactorAuthentication()) {
+            $twoFactorManualSecret = Fortify::currentEncrypter()->decrypt($user->two_factor_secret);
+        }
+
+        return view('security', compact('tokens', 'twoFactorManualSecret'));
     }
 
     public function storeToken(Request $request): RedirectResponse

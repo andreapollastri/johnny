@@ -45,6 +45,12 @@
         <div class="qr-frame mb-1" role="img" aria-label="Two-factor authentication QR code">
             {!! $user->twoFactorQrCodeSvg() !!}
         </div>
+
+        @if ($twoFactorManualSecret)
+            <p class="muted text-sm" style="margin-top:0.75rem;">If you cannot scan the code, add an account manually in your app (time-based / TOTP) and use this secret:</p>
+            <pre class="raw" style="word-break:break-all; margin-bottom:0.75rem;">{{ implode(' ', str_split($twoFactorManualSecret, 4)) }}</pre>
+        @endif
+
         <form method="POST" action="{{ url('/user/confirmed-two-factor-authentication') }}" class="mt-2">
             @csrf
             <div class="form-group">
@@ -52,6 +58,11 @@
                 <input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required>
             </div>
             <button type="submit">Confirm and enable</button>
+        </form>
+        <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-1" onsubmit="return confirm('Cancel two-factor setup? You can start again later.');">
+            @csrf
+            @method('DELETE')
+            <button type="submit" class="ghost">Cancel setup</button>
         </form>
 
     @else
