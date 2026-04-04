@@ -137,7 +137,7 @@ class BucketController extends Controller
             return back()->withErrors(['key_id' => 'Select at least one permission.'])->withInput();
         }
 
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'allow', '--yes'];
+        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'allow'];
         if ($request->boolean('read')) {
             $cmd[] = '--read';
         }
@@ -174,7 +174,7 @@ class BucketController extends Controller
             return back()->withErrors(['key_id' => 'Select at least one permission to revoke.'])->withInput();
         }
 
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'deny', '--yes'];
+        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'deny'];
         if ($request->boolean('read')) {
             $cmd[] = '--read';
         }
@@ -266,7 +266,7 @@ class BucketController extends Controller
         Process::run([
             'sudo', '-u', 'johnny',
             '/usr/local/bin/johnny',
-            'bucket', 'allow', '--yes', '--read', '--write', '--owner', $bucket, '--key', $keyName,
+            'bucket', 'allow', '--read', '--write', '--owner', $bucket, '--key', $keyName,
         ]);
     }
 }
