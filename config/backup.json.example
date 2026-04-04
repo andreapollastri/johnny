@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "retention_days": 90,
+  "remote_base_path": "johnny-backups",
+  "targets": []
+}

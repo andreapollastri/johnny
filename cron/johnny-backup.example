@@ -1,0 +1,12 @@
+# Nightly SFTP backup — only on the primary Johnny VPS.
+# Installed automatically by scripts/autoinstall.sh as /etc/cron.d/johnny-nightly
+#
+# Default schedule: 03:00 (see /etc/cron.d/johnny-nightly)
+#
+# Manual run:
+#   sudo johnny backup run
+#
+# Manage targets:
+#   sudo johnny backup list
+#   sudo johnny backup create vps-us-abc --host 203.0.113.10 --user backup
+#   sudo johnny backup set-retention 90

@@ -1,0 +1,30 @@
+# Copy to /etc/johnny/rclone-replica.conf on VPS1 (main), chmod 600, owner root or the cron user.
+# Replace endpoints and keys. Region must match s3_region in garage.toml (default: johnny).
+
+[johnny-main]
+type = s3
+provider = Other
+env_auth = false
+access_key_id = GK_REPLACE_MAIN_KEY_ID
+secret_access_key = REPLACE_MAIN_SECRET
+endpoint = https://main.johnny.it
+region = johnny
+force_path_style = true
+
+[johnny-eu]
+type = s3
+provider = Other
+access_key_id = GK_REPLACE_EU_KEY_ID
+secret_access_key = REPLACE_EU_SECRET
+endpoint = https://backup-eu.johnny.it
+region = johnny
+force_path_style = true
+
+[johnny-us]
+type = s3
+provider = Other
+access_key_id = GK_REPLACE_US_KEY_ID
+secret_access_key = REPLACE_US_SECRET
+endpoint = https://backup-us.johnny.it
+region = johnny
+force_path_style = true

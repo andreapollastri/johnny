@@ -1,0 +1,8 @@
+# Caddyfile fragment: S3 API on main.johnny.it → Garage on localhost:3900
+# Adjust domain; Caddy obtains TLS automatically when using a public domain.
+
+main.johnny.it {
+    reverse_proxy 127.0.0.1:3900
+}
+
+# Repeat blocks for backup-eu.johnny.it, backup-us.johnny.it, etc., each VPS with its own hostname.

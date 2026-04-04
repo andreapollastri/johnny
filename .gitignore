@@ -1,0 +1,5 @@
+.env
+**/rclone.conf
+*.log
+config/replication/*.env
+!config/replication/*.example
