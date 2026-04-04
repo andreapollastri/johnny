@@ -269,6 +269,57 @@ code {
 }
 .card + .card { margin-top: 0; }
 
+/* --- Stat cards (dashboard) --- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.5rem 1rem;
+}
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+.stat-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.stat-label {
+  font-size: 0.725rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-ter);
+  margin-bottom: 0.25rem;
+}
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.stat-sub {
+  font-size: 0.75rem;
+  color: var(--text-ter);
+  margin-top: 0.2rem;
+}
+
 /* --- Grid (dashboard) --- */
 .card-grid {
   display: grid;
@@ -752,6 +803,7 @@ pre.raw {
   }
   .wrap { padding: 1.25rem 1rem 2rem; }
   .card { padding: 1rem 1.1rem; }
+  .stat-grid { grid-template-columns: 1fr; }
   .card-grid { grid-template-columns: 1fr; }
   h1 { font-size: 1.25rem; }
   .auth-card { padding: 1.5rem; }
