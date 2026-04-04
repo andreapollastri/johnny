@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Process;
 
 class ProvisionBucketController extends Controller
 {
+    /** Garage key names are limited to 128 characters in the panel UI; stay within the same bound. */
+    private const MAX_GARAGE_KEY_NAME_LEN = 128;
+
     public function __invoke(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -37,7 +40,7 @@ class ProvisionBucketController extends Controller
         $keyText = '';
 
         for ($attempt = 0; $attempt < 8; $attempt++) {
-            $keyName = 'bucket-'.bin2hex(random_bytes(4));
+            $keyName = $this->randomGarageKeyName($bucketName);
             $keyResult = Process::run([
                 'sudo', '-u', 'johnny',
                 '/usr/local/bin/johnny',
@@ -112,6 +115,22 @@ class ProvisionBucketController extends Controller
     private function randomBucketName(): string
     {
         return 'b-'.bin2hex(random_bytes(8));
+    }
+
+    /**
+     * Key name format: "{bucket}-{random hex}" (bucket prefix truncated if needed for Garage limits).
+     */
+    private function randomGarageKeyName(string $bucketName): string
+    {
+        $suffix = bin2hex(random_bytes(4));
+        $sepLen = 1;
+        $maxPrefixLen = self::MAX_GARAGE_KEY_NAME_LEN - $sepLen - strlen($suffix);
+        $prefix = $bucketName;
+        if (strlen($prefix) > $maxPrefixLen) {
+            $prefix = substr($prefix, 0, $maxPrefixLen);
+        }
+
+        return $prefix.'-'.$suffix;
     }
 
     /**

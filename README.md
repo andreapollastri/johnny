@@ -165,7 +165,7 @@ Example body: `{}` or `{"bucket":"my-tenant-data"}`.
 | `region` | From `GARAGE_DEFAULT_REGION` in `panel/.env` (default `johnny`) |
 | `endpoint` | Public S3 URL from `GARAGE_ENDPOINT` (same as app-facing HTTPS endpoint) |
 | `path_style` | `true` — use path-style addressing for S3 clients |
-| `key_name` | Garage key name (`bucket-` plus random hex) |
+| `key_name` | Garage key name: `{bucket}-{random hex}` (bucket prefix truncated to fit Garage limits) |
 | `credentials` | `access_key_id` and `secret_access_key` for S3 |
 | `env` | Convenience map: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` |
 
