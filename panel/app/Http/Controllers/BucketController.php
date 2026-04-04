@@ -70,6 +70,8 @@ class BucketController extends Controller
                 $this->parseKeys(),
                 fn ($k) => ! in_array($k['name'], self::SYSTEM_KEY_NAMES, true),
             ));
+            usort($authorizedKeys, fn ($a, $b) => strcasecmp($a['name'], $b['name']) ?: strcmp($a['id'], $b['id']));
+            usort($allKeys, fn ($a, $b) => strcasecmp($a['name'], $b['name']) ?: strcmp($a['id'], $b['id']));
         }
 
         return view('buckets.show', [

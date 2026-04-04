@@ -21,6 +21,7 @@ class KeyController extends Controller
 
         $keys = collect($this->parseKeys($output ?? ''))
             ->reject(fn ($k) => in_array($k['name'], self::SYSTEM_KEY_NAMES, true))
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
             ->all();
 

@@ -50,6 +50,8 @@ class GarageS3
             ];
         }
 
+        usort($out, fn ($a, $b) => strcasecmp($a['name'], $b['name']));
+
         return $out;
     }
 
