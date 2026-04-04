@@ -1,5 +1,13 @@
 # Johnny
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 **/rclone.conf
 *.log
 config/replication/*.env

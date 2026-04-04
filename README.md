@@ -1,5 +1,7 @@
 # Johnny
 
+**Version 1.0.0** — see the [`VERSION`](VERSION) file. Future releases bump SemVer there. **Install** is driven by **`scripts/install.sh`**, **`scripts/autoinstall.sh`**, and **`scripts/install-panel.sh`**; **`scripts/update.sh`** repeats the same sync + panel refresh after a `git pull`. Optional numbered scripts under **`scripts/migrations/`** are reserved for the future (folder kept with **`.gitkeep`** only for now).
+
 **Johnny** packages [Garage](https://garagehq.deuxfleurs.fr/) for **Ubuntu 24.04 LTS** with:
 
 - One-shot **autoinstall** (Garage layout, default S3 keys, **Caddy + Let’s Encrypt**, nightly cron).
@@ -86,9 +88,21 @@ Open `https://<panel-hostname>`, sign in, then use **Security** to enable **two-
 sudo bash scripts/install-panel.sh /path/to/johnny/repo https://panel.example.com
 ```
 
-The install script registers the clone as a **Git safe directory** (for Git ≥ 2.35), runs **Composer as root** so `panel/vendor` can be created on a root-owned tree, then **`chown`s `panel/` to `www-data`**. If you install dependencies by hand: add `git config --global --add safe.directory /path/to/johnny`, run Composer from a user that can write `panel/`, or use the same root-then-chown pattern.
+The install script registers the clone as a **Git safe directory** (for Git ≥ 2.35), runs **Composer as root** so `panel/vendor` can be created on a root-owned tree, then **`chown`s `panel/` to `www-data`**, and sets **`COMPOSER_ALLOW_SUPERUSER=1`** for non-interactive Composer. It uses a **`run_wwwdata` helper** so redirects and temp files are never created by root while targeting `panel/` (a root-owned `>` after `sudo -u www-data` breaks `.env` updates). If you install dependencies by hand: add `git config --global --add safe.directory /path/to/johnny`, run Composer from a user that can write `panel/`, or use the same root-then-chown pattern.
 
 See `config/caddy-panel.caddy.example` for a Caddy vhost on `panel/public`.
+
+## Update (git pull + sync from install)
+
+After pulling new commits in your clone (e.g. `/opt/johnny`), run **`scripts/update.sh`** as root. It optionally **`git pull --ff-only`** (`--pull`), then does the same **sync to `/usr/local/share/johnny`** as **`scripts/install.sh`** (via **`scripts/lib/sync-johnny-share.sh`**), and if **`panel/artisan`** exists, runs **Composer + Laravel migrate + caches** (same idea as **`install-panel.sh`**, without reinstalling PHP packages). **No numbered migration scripts** are required for 1.0.0 — the **`scripts/migrations/`** directory only holds **`.gitkeep`** until you add optional future scripts.
+
+Check the installed release: **`cat /usr/local/share/johnny/VERSION`**. Tag Git releases with **`v1.0.0`**, **`v1.1.0`**, … alongside **`VERSION`** bumps.
+
+```bash
+sudo bash /opt/johnny/scripts/update.sh /opt/johnny --pull
+sudo johnny update /opt/johnny --pull
+# or: sudo JOHNNY_REPO=/opt/johnny johnny update --pull
+```
 
 ## Manual install (without autoinstall)
 
@@ -102,7 +116,7 @@ Configure TLS yourself (see `config/nginx-johnny-s3.conf.example` or `config/cad
 
 ## `johnny` CLI
 
-Garage commands pass through:
+Besides **`johnny version`** / **`johnny --version`** (prints **`VERSION`** from `/usr/local/share/johnny/VERSION` when installed) and **`sudo johnny update /path/to/repo [--pull]`** (see [Update](#update-git-pull--sync-from-install)), Garage commands pass through:
 
 ```bash
 sudo johnny status

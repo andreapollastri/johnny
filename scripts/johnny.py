@@ -21,6 +21,7 @@ GARAGE_CFG = "/etc/johnny/garage.toml"
 BACKUP_JSON = Path("/etc/johnny/backup.json")
 RUN_USER = "johnny"
 NIGHTLY = "/usr/local/share/johnny/scripts/johnny-nightly-backup.sh"
+VERSION_FILE = Path("/usr/local/share/johnny/VERSION")
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -269,14 +270,50 @@ def dispatch_backup(argv: list[str]) -> None:
         sys.exit(1)
 
 
+def cmd_version() -> None:
+    if VERSION_FILE.is_file():
+        print(f"Johnny {VERSION_FILE.read_text().strip()}")
+    else:
+        print("Johnny (VERSION not installed — run install.sh or migration 001 / update)")
+
+
+def cmd_update(argv: list[str]) -> None:
+    require_root()
+    pull = False
+    pos: list[str] = []
+    for a in argv:
+        if a in ("--pull", "--git-pull"):
+            pull = True
+        else:
+            pos.append(a)
+    repo = pos[0] if pos else os.environ.get("JOHNNY_REPO", "")
+    if not repo:
+        die("Usage: sudo johnny update /path/to/johnny [--pull]  (or set JOHNNY_REPO)")
+    update_sh = "/usr/local/share/johnny/scripts/update.sh"
+    if not os.path.isfile(update_sh):
+        candidate = os.path.join(repo, "scripts", "update.sh")
+        if os.path.isfile(candidate):
+            update_sh = candidate
+    if not os.path.isfile(update_sh):
+        die(f"Missing update.sh (expected {update_sh} or under the repo scripts/).")
+    extra = [repo]
+    if pull:
+        extra.append("--pull")
+    os.execv("/bin/bash", ["/bin/bash", update_sh, *extra])
+
+
 def print_help() -> None:
     print("""Johnny — Garage + SFTP backup helpers
 
 Usage:
+  johnny version | -V | --version
+  johnny update /path/to/johnny [--pull]   (git pull optional + sync + panel refresh; needs JOHNNY_REPO if no path)
   johnny backup list | create | delete | update | run | set-retention
   johnny <garage-args>...     (passed to garage -c /etc/johnny/garage.toml as user 'johnny')
 
 Examples:
+  johnny version
+  sudo johnny update /opt/johnny --pull
   sudo johnny backup list
   sudo johnny backup create vps-us-abc --host 203.0.113.10 --user backup
   sudo johnny backup set-retention 90
@@ -293,6 +330,12 @@ def main() -> None:
         sys.exit(garage_exec(["status"]))
     if argv[0] in ("-h", "--help", "help"):
         print_help()
+        return
+    if argv[0] in ("version", "-V", "--version"):
+        cmd_version()
+        return
+    if argv[0] == "update":
+        cmd_update(argv[1:])
         return
     if argv[0] == "backup":
         dispatch_backup(argv[1:])

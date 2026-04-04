@@ -81,33 +81,10 @@ else
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-install -m 0755 "${SCRIPT_DIR}/johnny.py" "${INSTALL_PREFIX}/bin/johnny"
-
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SHARE="/usr/local/share/johnny"
-install -d -m 0755 "${SHARE}/scripts" "${SHARE}/config"
-for f in bootstrap-single-node.sh install-rclone.sh backup-replicate.sh replicate-run.sh autoinstall.sh install-panel.sh johnny-nightly-backup.sh johnny-nightly-backup.py; do
-  if [[ -f "${SCRIPT_DIR}/${f}" ]]; then
-    install -m 0755 "${SCRIPT_DIR}/${f}" "${SHARE}/scripts/${f}"
-  fi
-done
-if [[ -d "${REPO_ROOT}/config" ]]; then
-  shopt -s nullglob
-  examples=("${REPO_ROOT}/config/"*.example)
-  shopt -u nullglob
-  if ((${#examples[@]})); then
-    install -m 0644 "${examples[@]}" "${SHARE}/config/"
-  fi
-  if [[ -d "${REPO_ROOT}/config/replication" ]]; then
-    install -d -m 0755 "${SHARE}/config/replication"
-    shopt -s nullglob
-    repl=("${REPO_ROOT}/config/replication/"*.example)
-    shopt -u nullglob
-    if ((${#repl[@]})); then
-      install -m 0644 "${repl[@]}" "${SHARE}/config/replication/"
-    fi
-  fi
-fi
+# shellcheck source=lib/sync-johnny-share.sh
+source "${SCRIPT_DIR}/lib/sync-johnny-share.sh"
+sync_johnny_share
 
 if [[ ! -f /etc/johnny/backup.json ]] && [[ -f "${REPO_ROOT}/config/backup.json.example" ]]; then
   install -m 0600 "${REPO_ROOT}/config/backup.json.example" /etc/johnny/backup.json
