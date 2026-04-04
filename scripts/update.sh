@@ -60,4 +60,29 @@ else
   echo "No panel/artisan — skipping Laravel steps."
 fi
 
-echo "Update finished."
+# --- Run pending numbered migrations (scripts/migrations/NNN_*.sh) ---
+STATE_FILE="/etc/johnny/migrations.state"
+MIGRATIONS_DIR="$REPO_ROOT/scripts/migrations"
+LAST=$(tr -d '[:space:]' <"$STATE_FILE" 2>/dev/null || echo "000")
+[[ "$LAST" =~ ^[0-9]{3}$ ]] || LAST="000"
+
+shopt -s nullglob
+mapfile -t mig_paths < <(find "$MIGRATIONS_DIR" -maxdepth 1 -name '[0-9][0-9][0-9]_*.sh' -type f | sort -V)
+shopt -u nullglob
+
+if (( ${#mig_paths[@]} == 0 )); then
+  echo "No pending migrations."
+else
+  for mig_path in "${mig_paths[@]}"; do
+    mig_name=$(basename "$mig_path")
+    mig_num="${mig_name%%_*}"
+    if (( 10#$mig_num <= 10#$LAST )); then
+      continue
+    fi
+    echo "=== Migration $mig_name ==="
+    bash "$mig_path"
+    echo "$mig_num" >"$STATE_FILE"
+  done
+fi
+
+echo "Update finished (version $VER, last migration: $(cat "$STATE_FILE" 2>/dev/null || echo none))."

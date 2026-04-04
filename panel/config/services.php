@@ -40,6 +40,7 @@ return [
         'secret' => env('GARAGE_SECRET_ACCESS_KEY'),
         'region' => env('GARAGE_DEFAULT_REGION', 'johnny'),
         'endpoint' => env('GARAGE_ENDPOINT'),
+        'key_name' => env('GARAGE_KEY_NAME', 'johnny-default'),
     ],
 
 ];
