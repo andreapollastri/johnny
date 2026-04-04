@@ -27,34 +27,47 @@ def die(msg: str, code: int = 1) -> None:
     sys.exit(code)
 
 
-def sh_garage(args: list[str]) -> str:
+def johnny_local_rclone_block(access_key: str, secret_key: str) -> str:
+    """rclone [johnny_local] — must match what S3 clients use (global bucket aliases)."""
+    return f"""[johnny_local]
+type = s3
+provider = Other
+env_auth = false
+access_key_id = {access_key}
+secret_access_key = {secret_key}
+endpoint = http://127.0.0.1:3900
+region = johnny
+force_path_style = true
+"""
+
+
+def list_buckets() -> list[str]:
+    """Bucket names for the S3 API (global aliases), not `garage bucket list` column 1 (hex IDs)."""
     r = subprocess.run(
-        ["sudo", "-u", RUN_USER, GARAGE, "-c", str(GARAGE_CFG), *args],
+        ["rclone", "lsd", "johnny_local:", "--config", str(RCLONE_CONF)],
         capture_output=True,
         text=True,
     )
     if r.returncode != 0:
-        return ""
-    return (r.stdout or "") + (r.stderr or "")
-
-
-def list_buckets() -> list[str]:
-    out = sh_garage(["bucket", "list"])
+        msg = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
+        print(f"johnny-nightly: rclone lsd johnny_local: failed: {msg}", file=sys.stderr)
+        return []
     buckets: list[str] = []
-    for line in out.splitlines():
+    for line in r.stdout.splitlines():
         line = line.strip()
-        if not line or line.startswith("-"):
+        if not line:
             continue
-        if "List" in line and "bucket" in line.lower():
+        parts = line.split()
+        if len(parts) < 2:
             continue
-        tok = line.split()[0]
-        if re.match(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$", tok):
-            buckets.append(tok)
+        name = parts[-1]
+        if re.match(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$", name):
+            buckets.append(name)
     return list(dict.fromkeys(buckets))
 
 
-def ensure_backup_key_on_buckets() -> None:
-    for b in list_buckets():
+def ensure_backup_key_on_buckets(buckets: list[str]) -> None:
+    for b in buckets:
         subprocess.run(
             ["sudo", "-u", RUN_USER, GARAGE, "-c", GARAGE_CFG, "bucket", "allow", "--read", "--key", "johnny-backup", b],
             capture_output=True,
@@ -84,16 +97,7 @@ def load_cred() -> tuple[str, str]:
 def write_rclone_conf(sftp_name: str, host: str, port: int, user: str, password: str, access_key: str, secret_key: str) -> None:
     obs = subprocess.check_output(["rclone", "obscure", password], text=True).strip()
     RCLONE_CONF.write_text(
-        f"""[johnny_local]
-type = s3
-provider = Other
-env_auth = false
-access_key_id = {access_key}
-secret_access_key = {secret_key}
-endpoint = http://127.0.0.1:3900
-region = johnny
-force_path_style = true
-
+        f"""{johnny_local_rclone_block(access_key, secret_key)}
 [{sftp_name}]
 type = sftp
 host = {host}
@@ -152,8 +156,10 @@ def main() -> None:
     date_str = datetime.now().strftime("%Y-%m-%d")
 
     access_key, secret_key = load_cred()
-    ensure_backup_key_on_buckets()
+    RCLONE_CONF.write_text(johnny_local_rclone_block(access_key, secret_key), encoding="utf-8")
+    RCLONE_CONF.chmod(0o600)
     buckets = list_buckets()
+    ensure_backup_key_on_buckets(buckets)
     if not targets:
         print("No SFTP backup targets configured.")
         return
