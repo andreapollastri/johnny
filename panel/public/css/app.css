@@ -667,6 +667,70 @@ pre.raw {
   border-bottom-color: var(--accent);
 }
 
+/* --- File Manager --- */
+.fm-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-height: 1.5rem;
+}
+.fm-breadcrumb > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.fm-breadcrumb a {
+  color: var(--text-sec);
+}
+.fm-breadcrumb a:hover {
+  color: var(--accent);
+}
+.fm-breadcrumb .active {
+  color: var(--text);
+  font-weight: 600;
+}
+.fm-breadcrumb-sep {
+  color: var(--text-ter);
+  font-size: 0.85rem;
+  user-select: none;
+}
+
+.fm-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.fm-entry svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.fm-folder {
+  color: var(--text);
+  font-weight: 500;
+}
+.fm-folder:hover {
+  color: var(--accent);
+  opacity: 1;
+}
+.fm-folder svg {
+  color: var(--accent);
+}
+.fm-file svg {
+  color: var(--text-ter);
+}
+.fm-size {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.fm-row-folder td {
+  background: var(--bg-inset);
+}
+
 /* --- Empty state --- */
 .empty-state {
   text-align: center;

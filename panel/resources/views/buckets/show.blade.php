@@ -26,17 +26,49 @@
     @if ($objectsError)
         <div class="errors">{{ $objectsError }}</div>
     @else
+        @php
+            $formatSize = function ($bytes) {
+                if ($bytes === 0) return '0 B';
+                $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                $i = (int) floor(log($bytes, 1024));
+                $i = min($i, count($units) - 1);
+                $value = $bytes / pow(1024, $i);
+                return ($i === 0 ? (int) $value : number_format($value, 2)) . ' ' . $units[$i];
+            };
+
+            $breadcrumbs = [];
+            if ($prefix) {
+                $parts = array_filter(explode('/', $prefix));
+                $cumulative = '';
+                foreach ($parts as $part) {
+                    $cumulative .= $part . '/';
+                    $breadcrumbs[] = ['name' => $part, 'prefix' => $cumulative];
+                }
+            }
+
+            $parentPrefix = '';
+            if (count($breadcrumbs) >= 2) {
+                $parentPrefix = $breadcrumbs[count($breadcrumbs) - 2]['prefix'];
+            }
+        @endphp
+
         <div class="card">
-            <h2>Filter by prefix</h2>
-            <form method="GET" action="{{ route('buckets.show', $bucket) }}" class="form-row">
-                <input type="hidden" name="tab" value="objects">
-                <input type="text" name="prefix" value="{{ $prefix }}" placeholder="folder/">
-                <button type="submit" class="secondary">Apply</button>
-            </form>
+            <div class="fm-breadcrumb">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects']) }}" @class(['active' => !$prefix])>/</a>
+                @foreach ($breadcrumbs as $bc)
+                    <span class="fm-breadcrumb-sep">&rsaquo;</span>
+                    @if ($loop->last)
+                        <span class="active">{{ $bc['name'] }}</span>
+                    @else
+                        <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $bc['prefix']]) }}">{{ $bc['name'] }}</a>
+                    @endif
+                @endforeach
+            </div>
         </div>
 
         <div class="card">
-            <h2>Upload</h2>
+            <h2>Upload to {{ $prefix ?: '/' }}</h2>
             <form method="POST" action="{{ route('objects.store', $bucket) }}" enctype="multipart/form-data" class="form-row">
                 @csrf
                 <input type="hidden" name="prefix" value="{{ $prefix }}">
@@ -46,42 +78,68 @@
         </div>
 
         <div class="card">
-            <h2>Objects</h2>
-            @if (empty($objects))
+            <h2>Contents</h2>
+            @if (empty($folders) && empty($objects))
                 <div class="empty-state">
-                    <p>No objects{{ $prefix ? ' with prefix "'.$prefix.'"' : '' }}.</p>
+                    <p>This folder is empty.</p>
                 </div>
             @else
-            <table>
-                <thead>
-                    <tr>
-                        <th>Key</th>
-                        <th>Size</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach ($objects as $obj)
-                    <tr>
-                        <td><code>{{ $obj['key'] }}</code></td>
-                        <td class="muted">{{ number_format($obj['size']) }} B</td>
-                        <td>
-                            <div class="actions">
-                                <a href="{{ route('objects.download', $bucket) }}?key={{ urlencode($obj['key']) }}" class="ghost sm" style="padding:0.25rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.75rem;">Download</a>
-                                <form method="POST" action="{{ route('objects.destroy', $bucket) }}" onsubmit="return confirm('Delete this object?');" style="margin:0;">
-                                    @csrf
-                                    @method('DELETE')
-                                    <input type="hidden" name="key" value="{{ $obj['key'] }}">
-                                    <input type="hidden" name="prefix" value="{{ $prefix }}">
-                                    <button type="submit" class="danger sm">Delete</button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                @endforeach
-                </tbody>
-            </table>
-        @endif
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Size</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if ($prefix)
+                            <tr class="fm-row-folder">
+                                <td colspan="3">
+                                    <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $parentPrefix ?: '']) }}" class="fm-entry fm-folder">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                        ..
+                                    </a>
+                                </td>
+                            </tr>
+                        @endif
+                        @foreach ($folders as $folder)
+                            <tr class="fm-row-folder">
+                                <td colspan="2">
+                                    <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $folder]) }}" class="fm-entry fm-folder">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                        {{ basename(rtrim($folder, '/')) }}
+                                    </a>
+                                </td>
+                                <td></td>
+                            </tr>
+                        @endforeach
+                        @foreach ($objects as $obj)
+                            <tr>
+                                <td>
+                                    <div class="fm-entry fm-file">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                        <code>{{ basename($obj['key']) }}</code>
+                                    </div>
+                                </td>
+                                <td class="muted fm-size">{{ $formatSize($obj['size']) }}</td>
+                                <td>
+                                    <div class="actions">
+                                        <a href="{{ route('objects.download', $bucket) }}?key={{ urlencode($obj['key']) }}" class="ghost sm" style="padding:0.25rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.75rem;">Download</a>
+                                        <form method="POST" action="{{ route('objects.destroy', $bucket) }}" onsubmit="return confirm('Delete this object?');" style="margin:0;">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input type="hidden" name="key" value="{{ $obj['key'] }}">
+                                            <input type="hidden" name="prefix" value="{{ $prefix }}">
+                                            <button type="submit" class="danger sm">Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
         </div>
     @endif
 

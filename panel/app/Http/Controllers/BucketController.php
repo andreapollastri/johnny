@@ -38,6 +38,7 @@ class BucketController extends Controller
         $prefix = (string) $request->query('prefix', '');
 
         $objects = [];
+        $folders = [];
         $objectsError = '';
         $authorizedKeys = [];
         $bucketInfoRaw = '';
@@ -45,7 +46,9 @@ class BucketController extends Controller
 
         if ($tab === 'objects') {
             try {
-                $objects = $this->garage->listObjects($bucket, $prefix);
+                $result = $this->garage->listObjects($bucket, $prefix);
+                $folders = $result['folders'];
+                $objects = $result['files'];
             } catch (\Throwable $e) {
                 $objectsError = str_contains($e->getMessage(), 'AccessDenied')
                     ? "The panel key does not have access to this bucket. Go to the Keys tab and grant permissions to the panel key."
@@ -74,6 +77,7 @@ class BucketController extends Controller
             'tab' => $tab,
             'prefix' => $prefix,
             'objects' => $objects,
+            'folders' => $folders,
             'objectsError' => $objectsError,
             'authorizedKeys' => $authorizedKeys,
             'bucketInfoRaw' => $bucketInfoRaw,

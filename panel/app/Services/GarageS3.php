@@ -64,26 +64,34 @@ class GarageS3
     }
 
     /**
-     * @return list<array{key: string, size: int, last_modified: ?string}>
+     * @return array{folders: list<string>, files: list<array{key: string, size: int, last_modified: ?string}>}
      */
     public function listObjects(string $bucket, string $prefix = ''): array
     {
         $res = $this->client()->listObjectsV2([
             'Bucket' => $bucket,
             'Prefix' => $prefix,
-            'Delimiter' => '',
+            'Delimiter' => '/',
         ]);
 
-        $out = [];
+        $folders = [];
+        foreach ($res['CommonPrefixes'] ?? [] as $cp) {
+            $folders[] = $cp['Prefix'];
+        }
+
+        $files = [];
         foreach ($res['Contents'] ?? [] as $obj) {
-            $out[] = [
+            if ($obj['Key'] === $prefix) {
+                continue;
+            }
+            $files[] = [
                 'key' => $obj['Key'],
                 'size' => (int) ($obj['Size'] ?? 0),
                 'last_modified' => isset($obj['LastModified']) ? $obj['LastModified']->format('c') : null,
             ];
         }
 
-        return $out;
+        return ['folders' => $folders, 'files' => $files];
     }
 
     /**
