@@ -30,8 +30,8 @@
 
     @if ($user->hasEnabledTwoFactorAuthentication())
         <div class="status">2FA is enabled.</div>
-        <div class="qr-frame mb-1">
-            <img src="{{ url('/user/two-factor-qr-code') }}" alt="QR Code">
+        <div class="qr-frame mb-1" role="img" aria-label="Two-factor authentication QR code">
+            {!! $user->twoFactorQrCodeSvg() !!}
         </div>
         <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-2">
             @csrf
@@ -42,8 +42,8 @@
 
     @elseif ($user->two_factor_secret)
         <p class="muted">Scan the QR code with your authenticator app, then enter the code to confirm.</p>
-        <div class="qr-frame mb-1">
-            <img src="{{ url('/user/two-factor-qr-code') }}" alt="QR Code">
+        <div class="qr-frame mb-1" role="img" aria-label="Two-factor authentication QR code">
+            {!! $user->twoFactorQrCodeSvg() !!}
         </div>
         <form method="POST" action="{{ url('/user/confirmed-two-factor-authentication') }}" class="mt-2">
             @csrf
