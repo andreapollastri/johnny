@@ -54,24 +54,10 @@
     </div>
 </div>
 
-<div class="card-grid" style="margin-bottom: 1.5rem;">
-    <a href="{{ route('buckets.index') }}" class="card card-link">
-        <h2>Buckets</h2>
-        <p class="card-desc text-sm mb-0">Create, browse, and manage S3 buckets and their objects.</p>
-    </a>
-    <a href="{{ route('keys.index') }}" class="card card-link">
-        <h2>API Keys</h2>
-        <p class="card-desc text-sm mb-0">View and create Garage API keys via the CLI.</p>
-    </a>
-    <a href="{{ route('security.show') }}" class="card card-link">
-        <h2>Security</h2>
-        <p class="card-desc text-sm mb-0">Configure two-factor authentication for your account.</p>
-    </a>
-</div>
 
-@if (count($topBuckets) > 0)
+@if (count($topBucketsBySize) > 0)
     <div class="card">
-        <h2>Top {{ count($topBuckets) }} Buckets by Size</h2>
+        <h2>Top {{ count($topBucketsBySize) }} Buckets by Size</h2>
         <table>
             <thead>
                 <tr>
@@ -81,13 +67,39 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($topBuckets as $i => $b)
+                @foreach ($topBucketsBySize as $i => $b)
                     <tr>
                         <td class="muted">{{ $i + 1 }}</td>
                         <td>
                             <a href="{{ route('buckets.show', $b['name']) }}">{{ $b['name'] }}</a>
                         </td>
                         <td class="muted fm-size" style="text-align: right;">{{ $formatSize($b['size']) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+@endif
+
+@if (count($topBucketsByCount) > 0)
+    <div class="card">
+        <h2>Top {{ count($topBucketsByCount) }} Buckets by Number of Files</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Bucket</th>
+                    <th style="text-align: right;">Files</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($topBucketsByCount as $i => $b)
+                    <tr>
+                        <td class="muted">{{ $i + 1 }}</td>
+                        <td>
+                            <a href="{{ route('buckets.show', $b['name']) }}">{{ $b['name'] }}</a>
+                        </td>
+                        <td class="muted fm-size" style="text-align: right;">{{ number_format($b['count']) }}</td>
                     </tr>
                 @endforeach
             </tbody>

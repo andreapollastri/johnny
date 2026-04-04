@@ -94,9 +94,13 @@ class GarageS3
         return ['folders' => $folders, 'files' => $files];
     }
 
-    public function getBucketSize(string $bucket): int
+    /**
+     * @return array{size: int, count: int}
+     */
+    public function getBucketStats(string $bucket): array
     {
-        $total = 0;
+        $size = 0;
+        $count = 0;
         $token = null;
 
         do {
@@ -108,13 +112,14 @@ class GarageS3
             $res = $this->client()->listObjectsV2($params);
 
             foreach ($res['Contents'] ?? [] as $obj) {
-                $total += (int) ($obj['Size'] ?? 0);
+                $size += (int) ($obj['Size'] ?? 0);
+                $count++;
             }
 
             $token = $res['IsTruncated'] ? ($res['NextContinuationToken'] ?? null) : null;
         } while ($token);
 
-        return $total;
+        return ['size' => $size, 'count' => $count];
     }
 
     /**

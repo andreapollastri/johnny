@@ -15,22 +15,26 @@ class DashboardController extends Controller
     {
         $error = '';
         $buckets = [];
-        $bucketSizes = [];
+        $bucketStats = [];
         $totalSize = 0;
 
         try {
             $buckets = $this->garage->listBuckets();
 
             foreach ($buckets as $b) {
-                $size = $this->garage->getBucketSize($b['name']);
-                $bucketSizes[] = ['name' => $b['name'], 'size' => $size];
-                $totalSize += $size;
+                $stats = $this->garage->getBucketStats($b['name']);
+                $bucketStats[] = ['name' => $b['name'], 'size' => $stats['size'], 'count' => $stats['count']];
+                $totalSize += $stats['size'];
             }
-
-            usort($bucketSizes, fn ($a, $b) => $b['size'] <=> $a['size']);
         } catch (\Throwable $e) {
             $error = $e->getMessage();
         }
+
+        $bySize = $bucketStats;
+        usort($bySize, fn ($a, $b) => $b['size'] <=> $a['size']);
+
+        $byCount = $bucketStats;
+        usort($byCount, fn ($a, $b) => $b['count'] <=> $a['count']);
 
         $diskTotal = @disk_total_space('/') ?: 0;
         $diskUsedPercent = $diskTotal > 0 ? ($totalSize / $diskTotal) * 100 : 0;
@@ -41,7 +45,8 @@ class DashboardController extends Controller
             'totalSize' => $totalSize,
             'diskTotal' => $diskTotal,
             'diskUsedPercent' => $diskUsedPercent,
-            'topBuckets' => array_slice($bucketSizes, 0, 10),
+            'topBucketsBySize' => array_slice($bySize, 0, 10),
+            'topBucketsByCount' => array_slice($byCount, 0, 10),
         ]);
     }
 }
