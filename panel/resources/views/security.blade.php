@@ -10,8 +10,14 @@
     <p class="subtitle">Manage two-factor authentication and panel API tokens (for example <code class="text-xs">POST /api/buckets/provision</code>).</p>
 </div>
 
-@if (session('status'))
-    <div class="status">{{ session('status') }}</div>
+@if ($flashStatus = session('status'))
+    <div class="status">{{ match ($flashStatus) {
+        'recovery-codes-generated' => 'Recovery codes have been regenerated. Save the new codes — the old ones no longer work.',
+        'two-factor-authentication-disabled' => 'Two-factor authentication has been disabled.',
+        'two-factor-authentication-enabled' => 'Two-factor authentication setup started. Confirm with your app to finish.',
+        'two-factor-authentication-confirmed' => 'Two-factor authentication is now enabled.',
+        default => $flashStatus,
+    } }}</div>
 @endif
 @if ($errors->any())
     <div class="errors">{{ $errors->first() }}</div>
@@ -29,7 +35,7 @@
     <h2>Two-factor authentication</h2>
 
     @if ($user->hasEnabledTwoFactorAuthentication())
-        <div class="status">2FA is enabled.</div>
+        <p class="muted" style="margin-bottom:0.75rem;">Two-factor authentication is enabled.</p>
         <div class="qr-frame mb-1" role="img" aria-label="Two-factor authentication QR code">
             {!! $user->twoFactorQrCodeSvg() !!}
         </div>
@@ -38,7 +44,48 @@
             @method('DELETE')
             <button type="submit" class="danger">Disable 2FA</button>
         </form>
-        <p class="muted mt-2"><a href="{{ url('/user/two-factor-recovery-codes') }}" target="_blank" rel="noopener">View recovery codes</a></p>
+
+        @if ($recoveryCodes !== null)
+            <div class="recovery-codes-block" style="margin-top:1.25rem;">
+                <h3 class="recovery-codes-heading">Recovery codes</h3>
+                <p class="muted text-sm" style="margin-bottom:0.75rem;">Each code works once if you lose access to your authenticator. Store them in a safe place — they are not shown anywhere else.</p>
+                @if (count($recoveryCodes) > 0)
+                    <div class="recovery-codes-grid" id="recovery-codes-grid" role="list" aria-label="Two-factor recovery codes">
+                        @foreach ($recoveryCodes as $code)
+                            <div class="recovery-code-cell" role="listitem"><code>{{ $code }}</code></div>
+                        @endforeach
+                    </div>
+                    <div class="recovery-codes-actions">
+                        <button type="button" class="ghost sm" id="recovery-codes-copy-btn" onclick="copyRecoveryCodes()">Copy all</button>
+                        <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0; display:inline;" onsubmit="return confirm('Regenerate all recovery codes? The current codes will stop working immediately.');">
+                            @csrf
+                            <button type="submit" class="ghost sm">Regenerate codes</button>
+                        </form>
+                    </div>
+                    <pre id="recovery-codes-plain" class="recovery-codes-plain">{{ implode("\n", $recoveryCodes) }}</pre>
+                @else
+                    <p class="muted text-sm">No recovery codes left. Generate a new set.</p>
+                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" onsubmit="return confirm('Generate new recovery codes?');">
+                        @csrf
+                        <button type="submit" class="ghost sm">Generate recovery codes</button>
+                    </form>
+                @endif
+            </div>
+            <script>
+            function copyRecoveryCodes() {
+                var pre = document.getElementById('recovery-codes-plain');
+                var btn = document.getElementById('recovery-codes-copy-btn');
+                if (!pre || !navigator.clipboard) return;
+                navigator.clipboard.writeText(pre.textContent.trim()).then(function() {
+                    if (btn) {
+                        var t = btn.textContent;
+                        btn.textContent = 'Copied';
+                        setTimeout(function() { btn.textContent = t; }, 2000);
+                    }
+                });
+            }
+            </script>
+        @endif
 
     @elseif ($user->two_factor_secret)
         <p class="muted">Scan the QR code with your authenticator app, then enter the code to confirm.</p>

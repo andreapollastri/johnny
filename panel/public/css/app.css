@@ -689,6 +689,63 @@ pre.raw {
   height: auto;
 }
 
+/* Recovery codes (2FA) */
+.recovery-codes-heading {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-sec);
+  margin: 0 0 0.5rem;
+}
+
+.recovery-codes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.recovery-code-cell {
+  padding: 0.5rem 0.65rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-sub);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.recovery-code-cell code {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  background: transparent;
+  padding: 0;
+}
+
+.recovery-codes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.recovery-codes-plain {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: pre;
+  border: 0;
+}
+
+.recovery-codes-block {
+  position: relative;
+}
+
 /* --- Tabs --- */
 .tabs {
   display: flex;

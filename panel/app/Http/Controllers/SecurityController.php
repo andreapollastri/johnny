@@ -27,7 +27,12 @@ class SecurityController extends Controller
             $twoFactorManualSecret = Fortify::currentEncrypter()->decrypt($user->two_factor_secret);
         }
 
-        return view('security', compact('tokens', 'twoFactorManualSecret'));
+        $recoveryCodes = null;
+        if ($user->hasEnabledTwoFactorAuthentication() && $user->two_factor_recovery_codes) {
+            $recoveryCodes = $user->recoveryCodes();
+        }
+
+        return view('security', compact('tokens', 'twoFactorManualSecret', 'recoveryCodes'));
     }
 
     public function storeToken(Request $request): RedirectResponse
