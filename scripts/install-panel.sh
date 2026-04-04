@@ -98,4 +98,3 @@ fi
 
 echo "Laravel panel installed at $PANEL_DIR"
 echo "Next: configure Caddy/nginx (see config/caddy-panel.caddy.example) for $PANEL_DIR/public"
-echo "Create admin: sudo -u www-data php $PANEL_DIR/artisan johnny:admin you@example.com 'strong-password'"
