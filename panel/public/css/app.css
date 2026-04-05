@@ -901,6 +901,7 @@ pre.raw {
 /* --- Responsive --- */
 @media (max-width: 640px) {
   .topbar { padding: 0 1rem; }
+  .topbar-brand-text { display: none; }
   .topbar-nav { gap: 0.15rem; }
   .topbar-nav a, .topbar-nav .nav-link {
     padding: 0.35rem 0.5rem;
