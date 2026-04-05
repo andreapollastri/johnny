@@ -1,12 +1,12 @@
 # Caddyfile fragment: S3 API on main.johnny.it → Garage on localhost:3900
 # Adjust domain; Caddy obtains TLS automatically when using a public domain.
-# Install 404.html to /var/www/johnny-static/ (autoinstall + migrations 002–003).
+# Install 404.html to /var/www/johnny-static/ (autoinstall + migrations 002–003, 005).
 
 main.johnny.it {
     root * /var/www/johnny-static
 
+    # Any path, not only / — anonymous browsers avoid Garage XML on random URLs.
     @friendly_anon {
-        path /
         not header Authorization *
         not query X-Amz-Algorithm=*
         not query X-Amz-Credential=*

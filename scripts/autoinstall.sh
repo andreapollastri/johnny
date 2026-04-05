@@ -87,7 +87,6 @@ ${DOMAIN} {
     root * /var/www/johnny-static
 
     @friendly_anon {
-        path /
         not header Authorization *
         not query X-Amz-Algorithm=*
         not query X-Amz-Credential=*

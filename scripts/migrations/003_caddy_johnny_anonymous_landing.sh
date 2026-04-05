@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Migration 003 — Enable anonymous GET / landing page in /etc/caddy/johnny.caddy (Caddy → static 404.html, else Garage).
+# Migration 003 — Enable anonymous landing page in /etc/caddy/johnny.caddy (Caddy → static 404.html, else Garage).
 # Skips if already present, multiple site blocks, or non-standard layout.
 set -euo pipefail
 
@@ -51,7 +51,6 @@ ${DOMAIN} {
     root * ${STATIC_DIR}
 
     @friendly_anon {
-        path /
         not header Authorization *
         not query X-Amz-Algorithm=*
         not query X-Amz-Credential=*
