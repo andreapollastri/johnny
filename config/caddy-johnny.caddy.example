@@ -1,21 +1,21 @@
 # Caddyfile fragment: S3 API on main.johnny.it → Garage on localhost:3900
 # Adjust domain; Caddy obtains TLS automatically when using a public domain.
+# Install 404.html to /var/www/johnny-static/ (autoinstall + migrations 002–003).
 
 main.johnny.it {
-    # Optional: friendly page for anonymous GET / (browser) instead of Garage XML.
-    # Requires migration 002 or manual install of files under /var/www/johnny-static/
-    # root * /var/www/johnny-static
-    # @friendly_anon {
-    #     path /
-    #     not header Authorization *
-    #     not query X-Amz-Algorithm=*
-    #     not query X-Amz-Credential=*
-    #     not query X-Amz-Signature=*
-    # }
-    # handle @friendly_anon {
-    #     rewrite * /404.html
-    #     file_server
-    # }
+    root * /var/www/johnny-static
+
+    @friendly_anon {
+        path /
+        not header Authorization *
+        not query X-Amz-Algorithm=*
+        not query X-Amz-Credential=*
+        not query X-Amz-Signature=*
+    }
+    handle @friendly_anon {
+        rewrite * /404.html
+        file_server
+    }
 
     reverse_proxy 127.0.0.1:3900
 }

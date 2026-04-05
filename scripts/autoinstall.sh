@@ -75,12 +75,29 @@ read -r -p "Public domain for S3 API (DNS must already point here), e.g. storage
 
 sed -i.bak "s|https://PLACEHOLDER_DOMAIN|https://${DOMAIN}|" /etc/johnny/credentials/default-s3.env
 
+install -d -m 0755 /var/www/johnny-static
+install -m 0644 "${REPO_ROOT}/config/caddy-static/404.html" /var/www/johnny-static/404.html
+
 if [[ -f /etc/caddy/Caddyfile ]]; then
   cp -a /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%s)"
 fi
 
 cat > /etc/caddy/johnny.caddy <<EOF
 ${DOMAIN} {
+    root * /var/www/johnny-static
+
+    @friendly_anon {
+        path /
+        not header Authorization *
+        not query X-Amz-Algorithm=*
+        not query X-Amz-Credential=*
+        not query X-Amz-Signature=*
+    }
+    handle @friendly_anon {
+        rewrite * /404.html
+        file_server
+    }
+
     reverse_proxy 127.0.0.1:3900
 }
 EOF

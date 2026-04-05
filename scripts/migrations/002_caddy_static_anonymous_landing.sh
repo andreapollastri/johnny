@@ -19,5 +19,4 @@ install -d -m 0755 "$DEST_DIR"
 install -m 0644 "$SRC" "$DEST"
 
 echo "002: Done."
-echo "     Merge the optional @friendly_anon block from caddy-johnny.caddy.example into your Caddyfile"
-echo "     (root must point to $DEST_DIR), then: sudo systemctl reload caddy"
+echo "     Migration 003 updates /etc/caddy/johnny.caddy when applicable; run scripts/update.sh to apply."
