@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Migration 004 — Refresh /var/www/johnny-static/404.html from the repo (branding / layout updates).
+set -euo pipefail
+
+REPO_ROOT="${REPO_ROOT:?REPO_ROOT must be set}"
+SRC="$REPO_ROOT/config/caddy-static/404.html"
+DEST_DIR="/var/www/johnny-static"
+DEST="$DEST_DIR/404.html"
+
+[[ -f "$SRC" ]] || {
+  echo "004: Source missing ($SRC) — skipping."
+  exit 0
+}
+
+echo "004: Refreshing anonymous landing page → $DEST..."
+install -d -m 0755 "$DEST_DIR"
+install -m 0644 "$SRC" "$DEST"
+
+echo "004: Done."
