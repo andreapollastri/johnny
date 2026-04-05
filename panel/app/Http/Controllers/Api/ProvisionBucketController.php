@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\JohnnyCliService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Process;
@@ -11,6 +12,10 @@ class ProvisionBucketController extends Controller
 {
     /** Garage key names are limited to 128 characters in the panel UI; stay within the same bound. */
     private const MAX_GARAGE_KEY_NAME_LEN = 128;
+
+    public function __construct(
+        private JohnnyCliService $johnny
+    ) {}
 
     public function __invoke(Request $request): JsonResponse
     {
@@ -48,7 +53,7 @@ class ProvisionBucketController extends Controller
             ]);
 
             $keyText = trim($keyResult->output()."\n".$keyResult->errorOutput());
-            $parsed = $this->parseKeyCreateOutput($keyText);
+            $parsed = $this->johnny->parseKeyCreateOutput($keyText);
 
             if ($keyResult->successful() && $parsed !== null) {
                 break;
@@ -131,29 +136,5 @@ class ProvisionBucketController extends Controller
         }
 
         return $prefix.'-'.$suffix;
-    }
-
-    /**
-     * @return array{access_key_id: string, secret_access_key: string}|null
-     */
-    private function parseKeyCreateOutput(string $output): ?array
-    {
-        $accessKeyId = '';
-        $secret = '';
-
-        foreach (explode("\n", $output) as $line) {
-            if (preg_match('/^\s*Key ID:\s*(.+)$/i', $line, $m)) {
-                $accessKeyId = trim($m[1]);
-            }
-            if (preg_match('/^\s*Secret key:\s*(.+)$/i', $line, $m)) {
-                $secret = trim($m[1]);
-            }
-        }
-
-        if ($accessKeyId === '' || $secret === '') {
-            return null;
-        }
-
-        return ['access_key_id' => $accessKeyId, 'secret_access_key' => $secret];
     }
 }

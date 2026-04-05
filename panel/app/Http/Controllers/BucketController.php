@@ -3,18 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Services\GarageS3;
+use App\Services\JohnnyCliService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Process;
 use Illuminate\View\View;
 
 class BucketController extends Controller
 {
-    private const SYSTEM_KEY_NAMES = ['johnny-default', 'johnny-backup'];
-    private const PROTECTED_BUCKETS = ['default'];
-
     public function __construct(
-        private GarageS3 $garage
+        private GarageS3 $garage,
+        private JohnnyCliService $johnny
     ) {}
 
     public function index(): View
@@ -51,24 +49,24 @@ class BucketController extends Controller
                 $objects = $result['files'];
             } catch (\Throwable $e) {
                 $objectsError = str_contains($e->getMessage(), 'AccessDenied')
-                    ? "The panel key does not have access to this bucket. Go to the Keys tab and grant permissions to the panel key."
+                    ? 'The panel key does not have access to this bucket. Go to the Keys tab and grant permissions to the panel key.'
                     : $e->getMessage();
             }
         }
 
         if ($tab === 'keys') {
-            [$authorizedKeys, $bucketInfoRaw] = $this->parseBucketInfo($bucket);
+            [$authorizedKeys, $bucketInfoRaw] = $this->johnny->parseBucketInfo($bucket);
 
             // Hide system keys from the authorized list
             $authorizedKeys = array_values(array_filter(
                 $authorizedKeys,
-                fn ($k) => ! in_array($k['name'], self::SYSTEM_KEY_NAMES, true),
+                fn ($k) => ! in_array($k['name'], JohnnyCliService::SYSTEM_KEY_NAMES, true),
             ));
 
             // Only show user-created keys in the grant dropdown
             $allKeys = array_values(array_filter(
-                $this->parseKeys(),
-                fn ($k) => ! in_array($k['name'], self::SYSTEM_KEY_NAMES, true),
+                $this->johnny->listAllKeys(),
+                fn ($k) => ! in_array($k['name'], JohnnyCliService::SYSTEM_KEY_NAMES, true),
             ));
             usort($authorizedKeys, fn ($a, $b) => strcasecmp($a['name'], $b['name']) ?: strcmp($a['id'], $b['id']));
             usort($allKeys, fn ($a, $b) => strcasecmp($a['name'], $b['name']) ?: strcmp($a['id'], $b['id']));
@@ -84,7 +82,7 @@ class BucketController extends Controller
             'authorizedKeys' => $authorizedKeys,
             'bucketInfoRaw' => $bucketInfoRaw,
             'allKeys' => $allKeys,
-            'isProtected' => in_array($bucket, self::PROTECTED_BUCKETS, true),
+            'isProtected' => in_array($bucket, JohnnyCliService::PROTECTED_BUCKETS, true),
         ]);
     }
 
@@ -96,32 +94,24 @@ class BucketController extends Controller
 
         $name = $validated['name'];
 
-        $result = Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'create', $name,
-        ]);
+        $result = $this->johnny->runJohnnyResult(['bucket', 'create', $name]);
 
         if (! $result->successful()) {
             return back()->withErrors(['name' => $result->errorOutput() ?: $result->output()])->withInput();
         }
 
-        $this->allowKeyOnBucket(config('services.garage.key_name', 'johnny-default'), $name);
+        $this->johnny->allowKeyOnBucket(config('services.garage.key_name', 'johnny-default'), $name);
 
         return redirect()->route('buckets.index')->with('status', 'Bucket created.');
     }
 
     public function destroy(string $bucket): RedirectResponse
     {
-        if (in_array($bucket, self::PROTECTED_BUCKETS, true)) {
+        if (in_array($bucket, JohnnyCliService::PROTECTED_BUCKETS, true)) {
             return back()->withErrors(['error' => "The \"{$bucket}\" bucket is protected and cannot be deleted."]);
         }
 
-        $result = Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'delete', '--yes', $bucket,
-        ]);
+        $result = $this->johnny->runJohnnyResult(['bucket', 'delete', '--yes', $bucket]);
 
         if (! $result->successful()) {
             return back()->withErrors(['error' => $result->errorOutput() ?: $result->output()]);
@@ -143,21 +133,13 @@ class BucketController extends Controller
             return back()->withErrors(['key_id' => 'Select at least one permission.'])->withInput();
         }
 
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'allow'];
-        if ($request->boolean('read')) {
-            $cmd[] = '--read';
-        }
-        if ($request->boolean('write')) {
-            $cmd[] = '--write';
-        }
-        if ($request->boolean('owner')) {
-            $cmd[] = '--owner';
-        }
-        $cmd[] = $bucket;
-        $cmd[] = '--key';
-        $cmd[] = $validated['key_id'];
-
-        $result = Process::run($cmd);
+        $result = $this->johnny->bucketAllow(
+            $bucket,
+            $validated['key_id'],
+            $request->boolean('read'),
+            $request->boolean('write'),
+            $request->boolean('owner'),
+        );
 
         if (! $result->successful()) {
             return back()->withErrors(['key_id' => $result->errorOutput() ?: $result->output()])->withInput();
@@ -180,21 +162,13 @@ class BucketController extends Controller
             return back()->withErrors(['key_id' => 'Select at least one permission to revoke.'])->withInput();
         }
 
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'deny'];
-        if ($request->boolean('read')) {
-            $cmd[] = '--read';
-        }
-        if ($request->boolean('write')) {
-            $cmd[] = '--write';
-        }
-        if ($request->boolean('owner')) {
-            $cmd[] = '--owner';
-        }
-        $cmd[] = $bucket;
-        $cmd[] = '--key';
-        $cmd[] = $validated['key_id'];
-
-        $result = Process::run($cmd);
+        $result = $this->johnny->bucketDeny(
+            $bucket,
+            $validated['key_id'],
+            $request->boolean('read'),
+            $request->boolean('write'),
+            $request->boolean('owner'),
+        );
 
         if (! $result->successful()) {
             return back()->withErrors(['key_id' => $result->errorOutput() ?: $result->output()])->withInput();
@@ -202,77 +176,5 @@ class BucketController extends Controller
 
         return redirect()->route('buckets.show', ['bucket' => $bucket, 'tab' => 'keys'])
             ->with('status', 'Permissions revoked.');
-    }
-
-    /**
-     * @return array{0: list<array{id: string, name: string, permissions: string}>, 1: string}
-     */
-    private function parseBucketInfo(string $bucket): array
-    {
-        $result = Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'info', $bucket,
-        ]);
-
-        $raw = $result->successful() ? $result->output() : '';
-        $keys = [];
-
-        foreach (explode("\n", $raw) as $line) {
-            $trimmed = trim($line);
-            if (preg_match('/^([RWO]+)\s+(GK[0-9a-f]+)\s*(.*)$/i', $trimmed, $m)) {
-                $perms = str_split(strtoupper(trim($m[1])));
-                $readable = [];
-                if (in_array('R', $perms)) $readable[] = 'read';
-                if (in_array('W', $perms)) $readable[] = 'write';
-                if (in_array('O', $perms)) $readable[] = 'owner';
-
-                $keys[] = [
-                    'id' => trim($m[2]),
-                    'name' => trim($m[3]),
-                    'permissions' => implode(', ', $readable),
-                ];
-            }
-        }
-
-        return [$keys, $raw];
-    }
-
-    /**
-     * @return list<array{id: string, name: string}>
-     */
-    private function parseKeys(): array
-    {
-        $result = Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'key', 'list',
-        ]);
-
-        if (! $result->successful()) {
-            return [];
-        }
-
-        $keys = [];
-        foreach (explode("\n", $result->output()) as $line) {
-            $line = trim($line);
-            // Format: "GKxxxx  2026-04-04  key-name  never" or "GKxxxx  key-name"
-            if (preg_match('/^(GK[0-9a-f]+)\s+\d{4}-\d{2}-\d{2}\s+(\S+)/i', $line, $m)) {
-                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
-            } elseif (preg_match('/^(GK[0-9a-f]+)\s+(\S+)/i', $line, $m)) {
-                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
-            }
-        }
-
-        return $keys;
-    }
-
-    private function allowKeyOnBucket(string $keyName, string $bucket): void
-    {
-        Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'allow', '--read', '--write', '--owner', $bucket, '--key', $keyName,
-        ]);
     }
 }

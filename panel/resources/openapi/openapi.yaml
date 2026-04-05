@@ -1,0 +1,521 @@
+openapi: 3.0.3
+info:
+  title: Johnny Panel API
+  description: |
+    JSON API for Garage buckets and keys. All endpoints except documentation require a **Laravel Sanctum** personal access token.
+
+    Create tokens in the panel under **Security → Panel API tokens**, or with `php artisan johnny:api-token user@example.com`.
+
+    Send `Authorization: Bearer <token>` and `Accept: application/json` on every request.
+  version: 1.0.0
+
+servers:
+  - url: /
+    description: Same origin as the panel (paths include `/api`)
+
+tags:
+  - name: Provisioning
+    description: One-shot bucket + dedicated S3 key (automation / tenants)
+  - name: Buckets
+    description: List, create, inspect, delete buckets
+  - name: Keys
+    description: List, create, inspect, delete Garage keys
+  - name: Bucket keys
+    description: Grant or revoke key permissions on a bucket
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+      description: Personal access token from the panel
+
+  schemas:
+    ErrorMessage:
+      type: object
+      properties:
+        message:
+          type: string
+        detail:
+          type: string
+          nullable: true
+
+    BucketListItem:
+      type: object
+      properties:
+        name:
+          type: string
+        created:
+          type: string
+          nullable: true
+          description: ISO 8601 from S3 ListBuckets
+
+    BucketCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+
+    KeyListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: GK00112233445566778899aabbccddeeff
+        name:
+          type: string
+
+    KeyCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]*$'
+
+    ProvisionRequest:
+      type: object
+      properties:
+        bucket:
+          type: string
+          nullable: true
+          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+          description: Optional; if omitted a random name is generated (prefix `b-`)
+
+    BucketKeyGrantRequest:
+      type: object
+      required: [key_id]
+      properties:
+        key_id:
+          type: string
+          description: Garage key id (GK…)
+        read:
+          type: boolean
+        write:
+          type: boolean
+        owner:
+          type: boolean
+      description: At least one of read, write, owner must be true
+
+    BucketKeyRevokeRequest:
+      type: object
+      properties:
+        read:
+          type: boolean
+        write:
+          type: boolean
+        owner:
+          type: boolean
+      description: At least one must be true. Can be sent as JSON body or query string on DELETE.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/buckets/provision:
+    post:
+      tags: [Provisioning]
+      summary: Provision bucket and key
+      description: |
+        Creates a bucket, creates a new Garage key scoped to it, grants that key full access,
+        and grants the panel key (`johnny-default`) access so the UI can manage the bucket.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionRequest'
+            examples:
+              empty:
+                value: {}
+              named:
+                value: { bucket: my-tenant-data }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bucket:
+                    type: string
+                  region:
+                    type: string
+                  endpoint:
+                    type: string
+                    nullable: true
+                  path_style:
+                    type: boolean
+                  key_name:
+                    type: string
+                  credentials:
+                    type: object
+                    properties:
+                      access_key_id:
+                        type: string
+                      secret_access_key:
+                        type: string
+                  env:
+                    type: object
+                    additionalProperties:
+                      type: string
+        '422':
+          description: Validation or bucket creation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          description: Key creation or permission step failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/buckets:
+    get:
+      tags: [Buckets]
+      summary: List buckets
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BucketListItem'
+        '503':
+          description: S3 list failed (e.g. AccessDenied)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+    post:
+      tags: [Buckets]
+      summary: Create bucket
+      description: After creation, the panel Garage key receives read/write/owner on the bucket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BucketCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+        '422':
+          description: Validation or johnny error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/buckets/{bucket}:
+    parameters:
+      - name: bucket
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+    get:
+      tags: [Buckets]
+      summary: Get bucket details
+      description: S3 metadata plus `johnny bucket info` (keys and raw output).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      created:
+                        type: string
+                        nullable: true
+                      keys:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              type: string
+                            permissions:
+                              type: string
+                      info_raw:
+                        type: string
+                        nullable: true
+        '404':
+          description: Bucket not found in S3 listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '503':
+          description: Could not list buckets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+    delete:
+      tags: [Buckets]
+      summary: Delete bucket
+      description: Bucket must be empty. The `default` bucket cannot be deleted.
+      responses:
+        '204':
+          description: No content
+        '403':
+          description: Protected bucket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '422':
+          description: Delete failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/keys:
+    get:
+      tags: [Keys]
+      summary: List keys
+      description: System keys `johnny-default` and `johnny-backup` are omitted.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/KeyListItem'
+        '503':
+          description: Could not run johnny key list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+    post:
+      tags: [Keys]
+      summary: Create key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      credentials:
+                        type: object
+                        properties:
+                          access_key_id:
+                            type: string
+                          secret_access_key:
+                            type: string
+                      raw_output:
+                        type: string
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                      name:
+                        type: string
+                      raw_output:
+                        type: string
+        '422':
+          description: Validation or create failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/keys/{keyId}:
+    parameters:
+      - name: keyId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^GK[0-9a-fA-F]+$'
+    get:
+      tags: [Keys]
+      summary: Get key
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/KeyListItem'
+        '403':
+          description: System keys are hidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '503':
+          description: Could not list keys
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+    delete:
+      tags: [Keys]
+      summary: Delete key
+      responses:
+        '204':
+          description: No content
+        '403':
+          description: System key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '422':
+          description: Delete failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/buckets/{bucket}/keys:
+    parameters:
+      - name: bucket
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+    post:
+      tags: [Bucket keys]
+      summary: Grant key permissions on bucket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BucketKeyGrantRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bucket:
+                    type: string
+                  key_id:
+                    type: string
+                  read:
+                    type: boolean
+                  write:
+                    type: boolean
+                  owner:
+                    type: boolean
+        '422':
+          description: Validation or johnny error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/buckets/{bucket}/keys/{keyId}:
+    parameters:
+      - name: bucket
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+      - name: keyId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^GK[0-9a-fA-F]+$'
+    delete:
+      tags: [Bucket keys]
+      summary: Revoke key permissions on bucket
+      description: |
+        Send which permissions to revoke (same as the panel form). Use a JSON body or query parameters
+        such as `?read=true&write=true&owner=false`. At least one flag must be true.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BucketKeyRevokeRequest'
+      responses:
+        '204':
+          description: No content
+        '404':
+          description: Key id not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '422':
+          description: Validation or johnny error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'

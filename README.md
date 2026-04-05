@@ -146,6 +146,8 @@ Authorization: Bearer <your-token>
 Accept: application/json
 ```
 
+**Interactive docs (no token required):** open `GET /api/docs` in a browser for Swagger UI. The machine-readable OpenAPI 3 spec is at `GET /api/openapi.yaml`.
+
 **Endpoint:** `POST /api/buckets/provision`  
 Use your panel base URL, for example `https://panel.example.com/api/buckets/provision`.
 
@@ -184,6 +186,25 @@ curl -sS -X POST "https://panel.example.com/api/buckets/provision" \
 ```
 
 **Requirements:** the panel database must include Sanctum’s `personal_access_tokens` table (run `php artisan migrate` after upgrades). PHP must be allowed to run `sudo -u johnny /usr/local/bin/johnny` as for the rest of the panel (see **API Keys via the Panel** above).
+
+### Bucket, key, and permission APIs
+
+Same **Sanctum** authentication as provisioning (`Authorization: Bearer …`, `Accept: application/json`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/buckets` | List buckets (S3 `ListBuckets`). |
+| `POST` | `/api/buckets` | Create a bucket. JSON body: `{"name":"my-bucket"}` (same name rules as the UI). |
+| `GET` | `/api/buckets/{bucket}` | Bucket metadata from S3 plus `johnny bucket info` (`keys`, optional `info_raw`). |
+| `DELETE` | `/api/buckets/{bucket}` | Delete an empty bucket (the `default` bucket is protected). |
+| `GET` | `/api/keys` | List Garage keys (system keys `johnny-default` / `johnny-backup` are omitted, as in the UI). |
+| `POST` | `/api/keys` | Create a key. Body: `{"name":"my-key"}`. Response includes `id`, `credentials`, and optional `raw_output`. |
+| `GET` | `/api/keys/{keyId}` | Lookup one key by id (`GK…`). System keys return **403**. |
+| `DELETE` | `/api/keys/{keyId}` | Delete a key (system keys **403**). |
+| `POST` | `/api/buckets/{bucket}/keys` | Grant permissions. Body: `{"key_id":"GK…","read":true,"write":false,"owner":false}` (at least one of `read` / `write` / `owner` must be true). |
+| `DELETE` | `/api/buckets/{bucket}/keys/{keyId}` | Revoke permissions. Send the same boolean flags as the panel revoke form (query string or JSON body; at least one true). |
+
+Garage does not support renaming buckets or keys; there are no `PUT`/`PATCH` routes for those resources.
 
 ---
 

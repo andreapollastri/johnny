@@ -7,7 +7,7 @@
 
 <div class="page-header">
     <h1>Security</h1>
-    <p class="subtitle">Manage two-factor authentication and panel API tokens (for example <code class="text-xs">POST /api/buckets/provision</code>).</p>
+    <p class="subtitle">Manage two-factor authentication and panel API tokens. (Check the <a href="{{ route('api.docs') }}">API docs</a> for more information).</p>
 </div>
 
 @if ($flashStatus = session('status'))
