@@ -21,9 +21,12 @@ Route::middleware('auth:sanctum')->group(function () {
         ->where('keyId', 'GK[0-9a-fA-F]+')
         ->name('api.buckets.keys.destroy');
 
-    Route::apiResource('buckets', BucketApiController::class)->only(['index', 'store', 'show', 'destroy'])
-        ->where(['bucket' => '[a-z0-9][a-z0-9._-]{1,254}']);
-    Route::apiResource('keys', KeyApiController::class)->only(['index', 'store', 'show', 'destroy'])
-        ->parameters(['keys' => 'keyId'])
-        ->where(['keyId' => 'GK[0-9a-fA-F]+']);
+    // Prefix route names with api.* — apiResource() would otherwise collide with web routes (buckets.index, keys.store, …).
+    Route::name('api.')->group(function () {
+        Route::apiResource('buckets', BucketApiController::class)->only(['index', 'store', 'show', 'destroy'])
+            ->where(['bucket' => '[a-z0-9][a-z0-9._-]{1,254}']);
+        Route::apiResource('keys', KeyApiController::class)->only(['index', 'store', 'show', 'destroy'])
+            ->parameters(['keys' => 'keyId'])
+            ->where(['keyId' => 'GK[0-9a-fA-F]+']);
+    });
 });
