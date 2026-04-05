@@ -48,7 +48,7 @@
 
 @auth
 <footer class="site-footer">
-    Johnny &middot; Garage S3 Storage
+    Johnny &middot; <a target="_blank" href="https://johnny.web.ap.it">johnny.web.ap.it</a>
 </footer>
 @endauth
 </div>

@@ -7,7 +7,7 @@
 
 <div class="page-header">
     <h1>Security</h1>
-    <p class="subtitle">Manage two-factor authentication and panel API tokens. (Check the <a href="{{ route('api.docs') }}">API docs</a> for more information).</p>
+    <p class="subtitle">Manage two-factor authentication and panel API tokens. (Check the <a target="_blank" href="{{ route('api.docs') }}">API docs</a> for more information).</p>
 </div>
 
 @if ($flashStatus = session('status'))
