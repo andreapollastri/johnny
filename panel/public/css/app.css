@@ -263,6 +263,7 @@ a.theme-toggle:hover {
   flex: 1;
   max-width: 880px;
   width: 100%;
+  min-width: 0;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
 }
@@ -536,6 +537,17 @@ button.sm, .btn-sm {
 }
 
 /* --- Tables --- */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.table-wrap table {
+  width: max-content;
+  min-width: 100%;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

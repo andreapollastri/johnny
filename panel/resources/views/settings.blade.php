@@ -147,6 +147,7 @@
 @if ($tokens->isNotEmpty())
 <div class="card">
     <h2>Active tokens</h2>
+    <div class="table-wrap">
     <table>
         <thead>
             <tr>
@@ -173,6 +174,7 @@
         @endforeach
         </tbody>
     </table>
+    </div>
 </div>
 @else
 <div class="card">

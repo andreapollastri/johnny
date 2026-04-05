@@ -58,6 +58,7 @@
 @if (count($topBucketsBySize) > 0)
     <div class="card">
         <h2>Top {{ count($topBucketsBySize) }} Buckets by Size</h2>
+        <div class="table-wrap">
         <table>
             <thead>
                 <tr>
@@ -78,12 +79,14 @@
                 @endforeach
             </tbody>
         </table>
+        </div>
     </div>
 @endif
 
 @if (count($topBucketsByCount) > 0)
     <div class="card">
         <h2>Top {{ count($topBucketsByCount) }} Buckets by Number of Files</h2>
+        <div class="table-wrap">
         <table>
             <thead>
                 <tr>
@@ -104,6 +107,7 @@
                 @endforeach
             </tbody>
         </table>
+        </div>
     </div>
 @endif
 @endsection

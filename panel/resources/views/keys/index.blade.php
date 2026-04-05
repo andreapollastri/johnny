@@ -35,6 +35,7 @@
 @if (count($keys) > 0)
 <div class="card">
     <h2>All keys</h2>
+    <div class="table-wrap">
     <table>
         <thead>
             <tr>
@@ -60,6 +61,7 @@
         @endforeach
         </tbody>
     </table>
+    </div>
 </div>
 @elseif ($error)
 <div class="card">

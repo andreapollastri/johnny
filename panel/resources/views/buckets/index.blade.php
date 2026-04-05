@@ -34,6 +34,7 @@
             <p>No buckets yet.</p>
         </div>
     @else
+        <div class="table-wrap">
         <table>
             <thead>
                 <tr>
@@ -62,6 +63,7 @@
             @endforeach
             </tbody>
         </table>
+        </div>
     @endif
 </div>
 @endsection
