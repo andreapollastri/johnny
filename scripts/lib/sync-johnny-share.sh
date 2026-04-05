@@ -40,5 +40,14 @@ sync_johnny_share() {
         install -m 0644 "${repl[@]}" "${SHARE}/config/replication/"
       fi
     fi
+    if [[ -d "${REPO_ROOT}/config/caddy-static" ]]; then
+      install -d -m 0755 "${SHARE}/config/caddy-static"
+      shopt -s nullglob
+      local static_files=("${REPO_ROOT}/config/caddy-static"/*)
+      shopt -u nullglob
+      if ((${#static_files[@]})); then
+        install -m 0644 "${static_files[@]}" "${SHARE}/config/caddy-static/"
+      fi
+    fi
   fi
 }
