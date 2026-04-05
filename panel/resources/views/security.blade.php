@@ -36,9 +36,6 @@
 
     @if ($user->hasEnabledTwoFactorAuthentication())
         <p class="muted" style="margin-bottom:0.75rem;">Two-factor authentication is enabled.</p>
-        <div class="qr-frame mb-1" role="img" aria-label="Two-factor authentication QR code">
-            {!! $user->twoFactorQrCodeSvg() !!}
-        </div>
         <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-2">
             @csrf
             @method('DELETE')
@@ -47,8 +44,8 @@
 
         @if ($recoveryCodes !== null)
             <div class="recovery-codes-block" style="margin-top:1.25rem;">
-                <h3 class="recovery-codes-heading">Recovery codes</h3>
-                <p class="muted text-sm" style="margin-bottom:0.75rem;">Each code works once if you lose access to your authenticator. Store them in a safe place — they are not shown anywhere else.</p>
+                <h3 class="recovery-codes-heading">New recovery codes</h3>
+                <p class="muted text-sm" style="margin-bottom:0.75rem;">Each code works once if you lose access to your authenticator. Save them now — they will not be shown again on this page.</p>
                 @if (count($recoveryCodes) > 0)
                     <div class="recovery-codes-grid" id="recovery-codes-grid" role="list" aria-label="Two-factor recovery codes">
                         @foreach ($recoveryCodes as $code)
@@ -85,6 +82,21 @@
                 });
             }
             </script>
+        @else
+            <div style="margin-top:1.25rem;">
+                <p class="muted text-sm" style="margin-bottom:0.75rem;">Recovery codes are not displayed here after setup. Regenerate to get a new set (you will see them once after each regeneration).</p>
+                @if ($recoveryCodesExhausted)
+                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" onsubmit="return confirm('Generate new recovery codes?');">
+                        @csrf
+                        <button type="submit" class="ghost sm">Generate recovery codes</button>
+                    </form>
+                @else
+                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" onsubmit="return confirm('Regenerate all recovery codes? The current codes will stop working immediately.');">
+                        @csrf
+                        <button type="submit" class="ghost sm">Regenerate recovery codes</button>
+                    </form>
+                @endif
+            </div>
         @endif
 
     @elseif ($user->two_factor_secret)

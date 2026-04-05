@@ -28,11 +28,17 @@ class SecurityController extends Controller
         }
 
         $recoveryCodes = null;
+        $recoveryCodesExhausted = false;
         if ($user->hasEnabledTwoFactorAuthentication() && $user->two_factor_recovery_codes) {
-            $recoveryCodes = $user->recoveryCodes();
+            $codes = $user->recoveryCodes();
+            $recoveryCodesExhausted = count($codes) === 0;
+            // Only pass codes to the view right after regeneration (one-time display).
+            if ($request->session()->get('status') === Fortify::RECOVERY_CODES_GENERATED) {
+                $recoveryCodes = $codes;
+            }
         }
 
-        return view('security', compact('tokens', 'twoFactorManualSecret', 'recoveryCodes'));
+        return view('security', compact('tokens', 'twoFactorManualSecret', 'recoveryCodes', 'recoveryCodesExhausted'));
     }
 
     public function storeToken(Request $request): RedirectResponse
