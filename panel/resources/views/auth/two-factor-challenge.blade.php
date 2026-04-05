@@ -9,7 +9,7 @@
         {{ config('app.name') }}
     </div>
     <h1>Two-factor authentication</h1>
-    <p class="subtitle">Use your authenticator app or a one-time recovery code.</p>
+    <p class="subtitle">Almost there — confirm with your app or a backup code.</p>
 
     @if ($errors->any())
         <div class="errors">{{ $errors->first() }}</div>
@@ -18,10 +18,6 @@
     <form method="POST" action="{{ route('two-factor.login.store') }}" id="two-factor-form"
         data-initial-recovery="{{ filled(old('recovery_code')) ? '1' : '0' }}">
         @csrf
-        <div class="two-factor-toggle" role="group" aria-label="Verification method">
-            <button type="button" class="is-active" id="two-factor-mode-app" aria-pressed="true">Authenticator app</button>
-            <button type="button" id="two-factor-mode-recovery" aria-pressed="false">Recovery code</button>
-        </div>
         <div class="form-group">
             <label for="two-factor-token" id="two-factor-token-label">Authentication code</label>
             <input
@@ -34,7 +30,12 @@
                 autofocus
                 aria-describedby="two-factor-token-hint"
             >
-            <p class="muted text-sm" id="two-factor-token-hint" style="margin-top:0.35rem;">6-digit code from your app.</p>
+            <p class="muted text-sm" id="two-factor-token-hint" style="margin-top:0.35rem;">6-digit code from your authenticator app.</p>
+            <p class="two-factor-flip-wrap">
+                <button type="button" class="two-factor-flip" id="two-factor-flip" aria-label="Switch to recovery code">
+                    Use a recovery code instead
+                </button>
+            </p>
         </div>
         <button type="submit">Continue</button>
     </form>
@@ -44,9 +45,11 @@
         var input = document.getElementById('two-factor-token');
         var label = document.getElementById('two-factor-token-label');
         var hint = document.getElementById('two-factor-token-hint');
-        var btnApp = document.getElementById('two-factor-mode-app');
-        var btnRec = document.getElementById('two-factor-mode-recovery');
-        if (!form || !input || !label || !hint || !btnApp || !btnRec) return;
+        var flip = document.getElementById('two-factor-flip');
+        if (!form || !input || !label || !hint || !flip) return;
+
+        var txtToRecovery = 'Use a recovery code instead';
+        var txtToApp = 'Use authenticator app instead';
 
         function setMode(recovery) {
             input.value = '';
@@ -56,28 +59,26 @@
                 input.setAttribute('autocomplete', 'off');
                 input.setAttribute('spellcheck', 'false');
                 label.textContent = 'Recovery code';
-                hint.textContent = 'One of your saved recovery codes.';
-                btnApp.classList.remove('is-active');
-                btnApp.setAttribute('aria-pressed', 'false');
-                btnRec.classList.add('is-active');
-                btnRec.setAttribute('aria-pressed', 'true');
+                hint.textContent = 'Enter one of the one-time codes you saved when you enabled 2FA.';
+                flip.textContent = txtToApp;
+                flip.setAttribute('aria-label', 'Switch to authenticator app code');
             } else {
                 input.name = 'code';
                 input.setAttribute('inputmode', 'numeric');
                 input.setAttribute('autocomplete', 'one-time-code');
                 input.removeAttribute('spellcheck');
                 label.textContent = 'Authentication code';
-                hint.textContent = '6-digit code from your app.';
-                btnRec.classList.remove('is-active');
-                btnRec.setAttribute('aria-pressed', 'false');
-                btnApp.classList.add('is-active');
-                btnApp.setAttribute('aria-pressed', 'true');
+                hint.textContent = '6-digit code from your authenticator app.';
+                flip.textContent = txtToRecovery;
+                flip.setAttribute('aria-label', 'Switch to recovery code');
             }
             input.focus();
         }
 
-        btnApp.addEventListener('click', function () { setMode(false); });
-        btnRec.addEventListener('click', function () { setMode(true); });
+        flip.addEventListener('click', function () {
+            var recovery = input.name !== 'recovery_code';
+            setMode(recovery);
+        });
 
         if (form.getAttribute('data-initial-recovery') === '1') {
             setMode(true);
