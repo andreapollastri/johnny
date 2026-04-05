@@ -4,7 +4,7 @@ info:
   description: |
     JSON API for Garage buckets and keys. All endpoints except documentation require a **Laravel Sanctum** personal access token.
 
-    Create tokens in the panel under **Security → Panel API tokens**, or with `php artisan johnny:api-token user@example.com`.
+    Create tokens in the panel under **Settings → Panel API tokens**, or with `php artisan johnny:api-token user@example.com`.
 
     Send `Authorization: Bearer <token>` and `Accept: application/json` on every request.
   version: 1.0.0

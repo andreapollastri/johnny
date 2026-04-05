@@ -237,6 +237,27 @@ code {
   margin: 0 0.25rem;
 }
 
+.topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+a.theme-toggle {
+  color: var(--text-sec);
+  opacity: 1;
+}
+a.theme-toggle:hover {
+  opacity: 1;
+}
+
+.theme-toggle.active {
+  color: var(--text);
+  border-color: var(--text-ter);
+  background: var(--bg-inset);
+}
+
 /* --- Main content --- */
 .wrap {
   flex: 1;

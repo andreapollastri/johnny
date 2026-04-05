@@ -9,7 +9,7 @@ class CreateUserApiToken extends Command
 {
     protected $signature = 'johnny:api-token {email : Panel user email} {--name=api : Token name (shown in the database)}';
 
-    protected $description = 'Issue a Sanctum personal access token (same as Security → Panel API tokens; shown once).';
+    protected $description = 'Issue a Sanctum personal access token (same as Settings → Panel API tokens; shown once).';
 
     public function handle(): int
     {

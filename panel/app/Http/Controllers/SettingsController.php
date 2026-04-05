@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Laravel\Fortify\Fortify;
 
-class SecurityController extends Controller
+class SettingsController extends Controller
 {
     /**
      * Two-factor setup: Fortify exposes POST /user/two-factor-authentication (after password confirm).
@@ -38,7 +38,7 @@ class SecurityController extends Controller
             }
         }
 
-        return view('security', compact('tokens', 'twoFactorManualSecret', 'recoveryCodes', 'recoveryCodesExhausted'));
+        return view('settings', compact('tokens', 'twoFactorManualSecret', 'recoveryCodes', 'recoveryCodesExhausted'));
     }
 
     public function storeToken(Request $request): RedirectResponse
@@ -50,7 +50,7 @@ class SecurityController extends Controller
         $plainTextToken = $request->user()->createToken($validated['name'])->plainTextToken;
 
         return redirect()
-            ->route('security.show')
+            ->route('settings.show')
             ->with('status', 'API token created.')
             ->with('sanctum_token_plain', $plainTextToken);
     }
@@ -61,12 +61,12 @@ class SecurityController extends Controller
 
         if ($deleted === 0) {
             return redirect()
-                ->route('security.show')
+                ->route('settings.show')
                 ->withErrors(['token' => 'Token not found.']);
         }
 
         return redirect()
-            ->route('security.show')
+            ->route('settings.show')
             ->with('status', 'API token revoked.');
     }
 }

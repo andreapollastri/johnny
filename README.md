@@ -119,7 +119,7 @@ See `config/caddy-panel.caddy.example` for the Caddy vhost configuration.
 sudo -u www-data php /opt/johnny/panel/artisan johnny:admin you@example.com 'strong-password'
 ```
 
-Open `https://<panel-hostname>` and sign in. Go to **Security** to enable **two-factor authentication** (TOTP).
+Open `https://<panel-hostname>` and sign in. Open **Settings** (gear in the header) to enable **two-factor authentication** (TOTP).
 
 ### API Keys via the Panel
 
@@ -133,7 +133,7 @@ sudo install -m 0440 config/johnny-panel.sudoers.example /etc/sudoers.d/johnny-p
 
 When the panel is installed, it exposes a **JSON API** to provision a new Garage bucket together with a fresh S3 key scoped to that bucket. This is useful for automation (onboarding tenants, CI, internal tools) without logging into the UI for each bucket.
 
-**Authentication:** [Laravel Sanctum](https://laravel.com/docs/sanctum) personal access tokens. Create a token in the panel under **Security → Panel API tokens**, or issue one from the server:
+**Authentication:** [Laravel Sanctum](https://laravel.com/docs/sanctum) personal access tokens. Create a token in the panel under **Settings → Panel API tokens**, or issue one from the server:
 
 ```bash
 sudo -u www-data php /opt/johnny/panel/artisan johnny:api-token you@example.com --name=provisioning

@@ -1,12 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Security — '.config('app.name'))
+@section('title', 'Settings — '.config('app.name'))
 
 @section('content')
 @php($user = auth()->user())
 
 <div class="page-header">
-    <h1>Security</h1>
+    <h1>Settings</h1>
     <p class="subtitle">Manage two-factor authentication and panel API tokens. (Check the <a target="_blank" href="{{ route('api.docs') }}">API docs</a> for more information).</p>
 </div>
 
@@ -137,7 +137,7 @@
     <h2>Panel API tokens</h2>
     <p class="muted text-sm" style="margin-bottom:0.75rem;">Tokens authenticate HTTP requests to the panel API (Sanctum). Revoke a token if it may be compromised.</p>
 
-    <form method="POST" action="{{ route('security.tokens.store') }}" class="form-row">
+    <form method="POST" action="{{ route('settings.tokens.store') }}" class="form-row">
         @csrf
         <input type="text" name="name" value="{{ old('name') }}" placeholder="Label (e.g. CI, backup script)" required maxlength="255">
         <button type="submit">Create token</button>
@@ -163,7 +163,7 @@
                 <td class="muted text-sm">{{ $t->last_used_at ? $t->last_used_at->diffForHumans() : '—' }}</td>
                 <td class="muted text-sm">{{ $t->created_at->format('Y-m-d H:i') }}</td>
                 <td>
-                    <form method="POST" action="{{ route('security.tokens.destroy', $t->id) }}" onsubmit="return confirm('Revoke this token? Apps using it will stop working.');" style="margin:0;">
+                    <form method="POST" action="{{ route('settings.tokens.destroy', $t->id) }}" onsubmit="return confirm('Revoke this token? Apps using it will stop working.');" style="margin:0;">
                         @csrf
                         @method('DELETE')
                         <button type="submit" class="danger sm">Revoke</button>

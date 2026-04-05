@@ -4,7 +4,7 @@ use App\Http\Controllers\BucketController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\KeyController;
 use App\Http\Controllers\ObjectController;
-use App\Http\Controllers\SecurityController;
+use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -14,9 +14,10 @@ Route::get('/', function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
-    Route::get('/security', [SecurityController::class, 'show'])->name('security.show');
-    Route::post('/security/tokens', [SecurityController::class, 'storeToken'])->name('security.tokens.store');
-    Route::delete('/security/tokens/{tokenId}', [SecurityController::class, 'destroyToken'])->whereNumber('tokenId')->name('security.tokens.destroy');
+    Route::permanentRedirect('/security', '/settings');
+    Route::get('/settings', [SettingsController::class, 'show'])->name('settings.show');
+    Route::post('/settings/tokens', [SettingsController::class, 'storeToken'])->name('settings.tokens.store');
+    Route::delete('/settings/tokens/{tokenId}', [SettingsController::class, 'destroyToken'])->whereNumber('tokenId')->name('settings.tokens.destroy');
 
     Route::get('/buckets', [BucketController::class, 'index'])->name('buckets.index');
     Route::post('/buckets', [BucketController::class, 'store'])->name('buckets.store');
