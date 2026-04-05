@@ -9,3 +9,36 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/* 2FA challenge: switch between authenticator code and recovery code */
+.two-factor-toggle {
+    display: flex;
+    width: 100%;
+    margin-bottom: 0.75rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    background: var(--bg);
+}
+.two-factor-toggle button {
+    flex: 1;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+    border: none;
+    background: transparent;
+    color: var(--text-sec);
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.two-factor-toggle button + button {
+    border-left: 1px solid var(--border);
+}
+.two-factor-toggle button:hover {
+    color: var(--text);
+    background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+}
+.two-factor-toggle button.is-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+}
