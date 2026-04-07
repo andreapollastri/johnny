@@ -6,9 +6,10 @@ Used by scripts/migrations/006_*.sh during `johnny update`. Run as root.
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
+
+from johnny_garage_bucket_list import parse_bucket_list_stdout
 
 GARAGE = "/usr/local/bin/garage"
 GARAGE_CFG = "/etc/johnny/garage.toml"
@@ -27,45 +28,16 @@ def list_buckets() -> list[str]:
         msg = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
         print(f"ensure-system-keys: garage bucket list failed: {msg}", file=sys.stderr)
         return []
-    buckets: list[str] = []
-    hex_id = re.compile(r"^[0-9a-f]{32,128}$", re.IGNORECASE)
-    uuid_line = re.compile(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s+([a-z0-9][a-z0-9._-]*)$",
-        re.IGNORECASE,
-    )
-    uuid_first = re.compile(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        re.IGNORECASE,
-    )
-    name_ok = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
-    for line in r.stdout.splitlines():
-        line = line.rstrip()
-        if not line:
-            continue
-        if "list of buckets" in line.lower():
-            continue
-        stripped = line.replace("|", "").strip()
-        m = uuid_line.match(stripped)
-        if m:
-            buckets.append(m.group(1))
-            continue
-        if "\t" in stripped:
-            cols = [c.strip() for c in stripped.split("\t") if c.strip()]
-        else:
-            cols = re.split(r"\s{2,}|\s+", stripped)
-            cols = [c for c in cols if c]
-        if len(cols) < 2:
-            continue
-        last = cols[-1]
-        if hex_id.match(last):
-            for alias in cols[0].split(","):
-                alias = alias.strip()
-                if alias and name_ok.match(alias):
-                    buckets.append(alias)
-            continue
-        if uuid_first.match(cols[0]) and name_ok.match(cols[-1]):
-            buckets.append(cols[-1])
-    return list(dict.fromkeys(buckets))
+    buckets = parse_bucket_list_stdout(r.stdout or "")
+    if not buckets:
+        sample = (r.stdout or "").strip()[:800]
+        print(
+            "ensure-system-keys: parsed no bucket names from `garage bucket list`.",
+            file=sys.stderr,
+        )
+        if sample:
+            print(f"ensure-system-keys: stdout sample:\n{sample}", file=sys.stderr)
+    return buckets
 
 
 def main() -> int:

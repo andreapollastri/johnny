@@ -11,7 +11,7 @@ sync_johnny_share() {
     install -m 0644 "${REPO_ROOT}/VERSION" "${SHARE}/VERSION"
   fi
   local f
-  for f in bootstrap-single-node.sh install-rclone.sh backup-replicate.sh replicate-run.sh autoinstall.sh install-panel.sh update.sh johnny-nightly-backup.sh johnny-nightly-backup.py ensure-system-keys-on-buckets.py; do
+  for f in bootstrap-single-node.sh install-rclone.sh backup-replicate.sh replicate-run.sh autoinstall.sh install-panel.sh update.sh johnny-nightly-backup.sh johnny-nightly-backup.py johnny_garage_bucket_list.py ensure-system-keys-on-buckets.py; do
     if [[ -f "${SCRIPT_DIR}/${f}" ]]; then
       install -m 0755 "${SCRIPT_DIR}/${f}" "${SHARE}/scripts/${f}"
     fi

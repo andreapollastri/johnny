@@ -188,8 +188,8 @@ class JohnnyCliService
 
     /**
      * Parse `johnny bucket list` / `garage bucket list` stdout.
-     * Garage prints rows as: global_aliases (comma-separated) TAB local_aliases TAB hex(bucket_id).
-     * Older layouts may use UUID + global name on one line.
+     * Garage 2.x: ID (16 hex) TAB Created TAB Global aliases TAB Local aliases.
+     * Older: global_aliases TAB local TAB long hex id; or UUID + name on one line.
      *
      * @return list<string>
      */
@@ -197,6 +197,7 @@ class JohnnyCliService
     {
         $names = [];
         $hexId = '/^[0-9a-f]{32,128}$/';
+        $hex16 = '/^[0-9a-f]{16}$/';
         $uuidLine = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s+([a-z0-9][a-z0-9._-]*)$/i';
         $nameOk = '/^[a-z0-9][a-z0-9._-]*$/';
 
@@ -206,8 +207,27 @@ class JohnnyCliService
                 continue;
             }
 
-            $stripped = str_replace('|', '', $line);
-            $stripped = trim($stripped);
+            $low = strtolower($line);
+            $stripped = trim(str_replace('|', '', $line));
+            if (str_starts_with($stripped, 'ID') && str_contains($low, 'global') && str_contains($low, 'alias')) {
+                continue;
+            }
+            if (str_starts_with($stripped, 'ID') && str_contains($low, 'created')) {
+                continue;
+            }
+
+            $colsTab = array_map('trim', explode("\t", $line));
+            if (count($colsTab) >= 3
+                && preg_match($hex16, $colsTab[0])
+                && preg_match('/^\d{4}-\d{2}-\d{2}/', $colsTab[1])) {
+                foreach (array_map('trim', explode(',', $colsTab[2])) as $alias) {
+                    if ($alias !== '' && preg_match($nameOk, $alias)) {
+                        $names[] = $alias;
+                    }
+                }
+
+                continue;
+            }
 
             if (preg_match($uuidLine, $stripped, $m)) {
                 $names[] = $m[1];

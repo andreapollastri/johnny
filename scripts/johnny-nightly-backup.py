@@ -14,6 +14,8 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from johnny_garage_bucket_list import parse_bucket_list_stdout
+
 CONFIG = Path("/etc/johnny/backup.json")
 CRED = Path("/etc/johnny/credentials/backup-internal-s3.env")
 GARAGE = "/usr/local/bin/garage"
@@ -41,8 +43,34 @@ force_path_style = true
 """
 
 
+def _list_buckets_rclone_fallback() -> list[str]:
+    """If `garage bucket list` parsing yields nothing, list via S3 (backup key may see a subset)."""
+    if not CRED.is_file():
+        return []
+    r = subprocess.run(
+        ["rclone", "lsd", "johnny_local:", "--config", str(RCLONE_CONF)],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return []
+    buckets: list[str] = []
+    name_pat = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        name = parts[-1]
+        if name_pat.match(name):
+            buckets.append(name)
+    return list(dict.fromkeys(buckets))
+
+
 def list_buckets() -> list[str]:
-    """Global bucket names from `garage bucket list` (all buckets), not S3 ListBuckets (key-scoped)."""
+    """Global bucket names from `garage bucket list` (Garage 2.x table); optional rclone fallback."""
     r = subprocess.run(
         ["sudo", "-u", RUN_USER, GARAGE, "-c", GARAGE_CFG, "bucket", "list"],
         capture_output=True,
@@ -51,52 +79,36 @@ def list_buckets() -> list[str]:
     if r.returncode != 0:
         msg = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
         print(f"johnny-nightly: garage bucket list failed: {msg}", file=sys.stderr)
-        return []
-    buckets: list[str] = []
-    hex_id = re.compile(r"^[0-9a-f]{32,128}$", re.IGNORECASE)
-    uuid_line = re.compile(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s+([a-z0-9][a-z0-9._-]*)$",
-        re.IGNORECASE,
-    )
-    uuid_first = re.compile(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        re.IGNORECASE,
-    )
-    name_ok = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
-    for line in r.stdout.splitlines():
-        line = line.rstrip()
-        if not line:
-            continue
-        if "list of buckets" in line.lower():
-            continue
-        stripped = line.replace("|", "").strip()
-        m = uuid_line.match(stripped)
-        if m:
-            buckets.append(m.group(1))
-            continue
-        if "\t" in stripped:
-            cols = [c.strip() for c in stripped.split("\t") if c.strip()]
-        else:
-            cols = re.split(r"\s{2,}|\s+", stripped)
-            cols = [c for c in cols if c]
-        if len(cols) < 2:
-            continue
-        last = cols[-1]
-        if hex_id.match(last):
-            for alias in cols[0].split(","):
-                alias = alias.strip()
-                if alias and name_ok.match(alias):
-                    buckets.append(alias)
-            continue
-        if uuid_first.match(cols[0]) and name_ok.match(cols[-1]):
-            buckets.append(cols[-1])
-    return list(dict.fromkeys(buckets))
+        return _list_buckets_rclone_fallback()
+    buckets = parse_bucket_list_stdout(r.stdout or "")
+    if not buckets:
+        fb = _list_buckets_rclone_fallback()
+        if fb:
+            print(
+                "johnny-nightly: garage bucket list parsed no names; using rclone lsd fallback.",
+                file=sys.stderr,
+            )
+        return fb
+    return buckets
 
 
 def ensure_backup_key_on_buckets(buckets: list[str]) -> None:
     for b in buckets:
         subprocess.run(
-            ["sudo", "-u", RUN_USER, GARAGE, "-c", GARAGE_CFG, "bucket", "allow", "--read", "--key", "johnny-backup", b],
+            [
+                "sudo",
+                "-u",
+                RUN_USER,
+                GARAGE,
+                "-c",
+                GARAGE_CFG,
+                "bucket",
+                "allow",
+                "--read",
+                b,
+                "--key",
+                "johnny-backup",
+            ],
             capture_output=True,
         )
 
