@@ -95,6 +95,8 @@ class ProvisionBucketController extends Controller
             'bucket', 'allow', '--read', '--write', '--owner', $bucketName, '--key', $panelKeyName,
         ]);
 
+        $this->johnny->allowBackupKeyReadOnBucket($bucketName);
+
         $endpoint = config('services.garage.endpoint');
         $region = config('services.garage.region', 'johnny');
 

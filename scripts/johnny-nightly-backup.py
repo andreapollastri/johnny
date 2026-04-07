@@ -42,27 +42,54 @@ force_path_style = true
 
 
 def list_buckets() -> list[str]:
-    """Bucket names for the S3 API (global aliases), not `garage bucket list` column 1 (hex IDs)."""
+    """Global bucket names from `garage bucket list` (all buckets), not S3 ListBuckets (key-scoped)."""
     r = subprocess.run(
-        ["rclone", "lsd", "johnny_local:", "--config", str(RCLONE_CONF)],
+        ["sudo", "-u", RUN_USER, GARAGE, "-c", GARAGE_CFG, "bucket", "list"],
         capture_output=True,
         text=True,
     )
     if r.returncode != 0:
         msg = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
-        print(f"johnny-nightly: rclone lsd johnny_local: failed: {msg}", file=sys.stderr)
+        print(f"johnny-nightly: garage bucket list failed: {msg}", file=sys.stderr)
         return []
     buckets: list[str] = []
+    hex_id = re.compile(r"^[0-9a-f]{32,128}$", re.IGNORECASE)
+    uuid_line = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s+([a-z0-9][a-z0-9._-]*)$",
+        re.IGNORECASE,
+    )
+    uuid_first = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        re.IGNORECASE,
+    )
+    name_ok = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
     for line in r.stdout.splitlines():
-        line = line.strip()
+        line = line.rstrip()
         if not line:
             continue
-        parts = line.split()
-        if len(parts) < 2:
+        if "list of buckets" in line.lower():
             continue
-        name = parts[-1]
-        if re.match(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$", name):
-            buckets.append(name)
+        stripped = line.replace("|", "").strip()
+        m = uuid_line.match(stripped)
+        if m:
+            buckets.append(m.group(1))
+            continue
+        if "\t" in stripped:
+            cols = [c.strip() for c in stripped.split("\t") if c.strip()]
+        else:
+            cols = re.split(r"\s{2,}|\s+", stripped)
+            cols = [c for c in cols if c]
+        if len(cols) < 2:
+            continue
+        last = cols[-1]
+        if hex_id.match(last):
+            for alias in cols[0].split(","):
+                alias = alias.strip()
+                if alias and name_ok.match(alias):
+                    buckets.append(alias)
+            continue
+        if uuid_first.match(cols[0]) and name_ok.match(cols[-1]):
+            buckets.append(cols[-1])
     return list(dict.fromkeys(buckets))
 
 

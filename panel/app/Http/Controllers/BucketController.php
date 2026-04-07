@@ -100,7 +100,7 @@ class BucketController extends Controller
             return back()->withErrors(['name' => $result->errorOutput() ?: $result->output()])->withInput();
         }
 
-        $this->johnny->allowKeyOnBucket(config('services.garage.key_name', 'johnny-default'), $name);
+        $this->johnny->ensureDefaultSystemKeysOnBucket($name);
 
         return redirect()->route('buckets.index')->with('status', 'Bucket created.');
     }

@@ -52,7 +52,7 @@ class BucketApiController extends Controller
             ], 422);
         }
 
-        $this->johnny->allowKeyOnBucket(config('services.garage.key_name', 'johnny-default'), $name);
+        $this->johnny->ensureDefaultSystemKeysOnBucket($name);
 
         return response()->json([
             'data' => [

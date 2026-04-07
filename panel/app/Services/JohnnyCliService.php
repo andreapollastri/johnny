@@ -9,6 +9,9 @@ class JohnnyCliService
 {
     public const SYSTEM_KEY_NAMES = ['johnny-default', 'johnny-backup'];
 
+    /** Internal key used by nightly SFTP backup (`backup-internal-s3.env`). */
+    public const BACKUP_KEY_NAME = 'johnny-backup';
+
     public const PROTECTED_BUCKETS = ['default'];
 
     public function runJohnny(array $args): ?string
@@ -147,6 +150,100 @@ class JohnnyCliService
             '/usr/local/bin/johnny',
             'bucket', 'allow', '--read', '--write', '--owner', $bucket, '--key', $keyName,
         ]);
+    }
+
+    /**
+     * Read-only access for the internal backup key (nightly rclone sync).
+     */
+    public function allowBackupKeyReadOnBucket(string $bucket): void
+    {
+        Process::run([
+            'sudo', '-u', 'johnny',
+            '/usr/local/bin/johnny',
+            'bucket', 'allow', '--read', $bucket, '--key', self::BACKUP_KEY_NAME,
+        ]);
+    }
+
+    /**
+     * Grant the panel/app key (rw+owner) and the backup key (read) on a bucket.
+     */
+    public function ensureDefaultSystemKeysOnBucket(string $bucket): void
+    {
+        $this->allowKeyOnBucket(config('services.garage.key_name', 'johnny-default'), $bucket);
+        $this->allowBackupKeyReadOnBucket($bucket);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function listAllBucketNamesFromGarage(): array
+    {
+        $result = $this->runJohnnyResult(['bucket', 'list']);
+        if (! $result->successful()) {
+            return [];
+        }
+
+        return $this->parseGarageBucketList($result->output());
+    }
+
+    /**
+     * Parse `johnny bucket list` / `garage bucket list` stdout.
+     * Garage prints rows as: global_aliases (comma-separated) TAB local_aliases TAB hex(bucket_id).
+     * Older layouts may use UUID + global name on one line.
+     *
+     * @return list<string>
+     */
+    public function parseGarageBucketList(string $output): array
+    {
+        $names = [];
+        $hexId = '/^[0-9a-f]{32,128}$/';
+        $uuidLine = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s+([a-z0-9][a-z0-9._-]*)$/i';
+        $nameOk = '/^[a-z0-9][a-z0-9._-]*$/';
+
+        foreach (explode("\n", $output) as $line) {
+            $line = rtrim($line);
+            if ($line === '' || stripos($line, 'list of buckets') !== false) {
+                continue;
+            }
+
+            $stripped = str_replace('|', '', $line);
+            $stripped = trim($stripped);
+
+            if (preg_match($uuidLine, $stripped, $m)) {
+                $names[] = $m[1];
+
+                continue;
+            }
+
+            $cols = str_contains($stripped, "\t")
+                ? array_map('trim', explode("\t", $stripped))
+                : preg_split('/\s{2,}|\s+/u', $stripped);
+            $cols = array_values(array_filter($cols, fn ($c) => $c !== ''));
+            if (count($cols) < 2) {
+                continue;
+            }
+
+            $last = $cols[count($cols) - 1];
+            if (preg_match($hexId, $last)) {
+                foreach (array_map('trim', explode(',', $cols[0])) as $alias) {
+                    if ($alias !== '' && preg_match($nameOk, $alias)) {
+                        $names[] = $alias;
+                    }
+                }
+
+                continue;
+            }
+
+            $first = $cols[0];
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $first)) {
+                $tail = $cols[count($cols) - 1];
+                if (preg_match($nameOk, $tail)) {
+                    $names[] = $tail;
+                }
+            }
+        }
+
+        return array_values(array_unique($names));
     }
 
     public function bucketAllow(string $bucket, string $keyId, bool $read, bool $write, bool $owner): ProcessResult
