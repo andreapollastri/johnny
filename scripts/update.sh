@@ -100,4 +100,11 @@ if (( RAN == 0 )); then
   echo "No pending migrations."
 fi
 
+# 4. Re-apply johnny-default + johnny-backup on every bucket (idempotent; includes pre-existing buckets)
+ENSURE_PY="$REPO_ROOT/scripts/ensure-system-keys-on-buckets.py"
+if [[ -f "$ENSURE_PY" && -f /etc/johnny/garage.toml && -x /usr/local/bin/garage ]] && command -v python3 >/dev/null; then
+  echo "Ensuring system keys (johnny-default, johnny-backup) on all Garage buckets..."
+  python3 "$ENSURE_PY" || echo "Warning: ensure-system-keys-on-buckets.py failed — check output above." >&2
+fi
+
 echo "Update finished — Johnny $VER."

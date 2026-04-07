@@ -12,7 +12,8 @@ import re
 from typing import Final
 
 _NAME_OK: Final = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
-_HEX16: Final = re.compile(r"^[0-9a-f]{16}$", re.IGNORECASE)
+# Garage may truncate/prefix bucket id differently between releases
+_HEX_ID_PREFIX: Final = re.compile(r"^[0-9a-f]{8,64}$", re.IGNORECASE)
 _HEX_LONG: Final = re.compile(r"^[0-9a-f]{32,128}$", re.IGNORECASE)
 _UUID_LINE: Final = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s+([a-z0-9][a-z0-9._-]*)$",
@@ -54,17 +55,30 @@ def parse_bucket_list_stdout(stdout: str) -> list[str]:
 
         # Garage 2.x — tab-separated: ID (16 hex), Created, Global aliases, Local aliases (optional)
         cols_raw = [c.strip() for c in line.split("\t")]
-        if (
-            len(cols_raw) >= 3
-            and _HEX16.match(cols_raw[0])
-            and _DATE_PREFIX.match(cols_raw[1])
+        if len(cols_raw) >= 3 and _HEX_ID_PREFIX.match(cols_raw[0]) and _DATE_PREFIX.match(
+            cols_raw[1]
         ):
             _add_aliases_from_cell(cols_raw[2], out)
             continue
 
+        # Garage 2.x — space-only columns (format_table without tabs): id date globals [locals]
+        m_row = re.match(
+            r"^([0-9a-f]{8,64})\s+(\d{4}-\d{2}-\d{2})\s+(.+)$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if m_row and _DATE_PREFIX.match(m_row.group(2)):
+            rest = m_row.group(3).strip()
+            if re.search(r"\s{2,}", rest):
+                global_cell = re.split(r"\s{2,}", rest, maxsplit=1)[0].strip()
+            else:
+                global_cell = rest
+            _add_aliases_from_cell(global_cell, out)
+            continue
+
         # Same layout, space-padded (format_table)
         m_pad = re.match(
-            r"^([0-9a-f]{16})\s+(\d{4}-\d{2}-\d{2})\s+(.+?)\s{2,}(.+)$",
+            r"^([0-9a-f]{8,64})\s+(\d{4}-\d{2}-\d{2})\s+(.+?)\s{2,}(.+)$",
             stripped,
             re.IGNORECASE,
         )

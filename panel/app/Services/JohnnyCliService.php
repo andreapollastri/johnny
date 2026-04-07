@@ -197,7 +197,7 @@ class JohnnyCliService
     {
         $names = [];
         $hexId = '/^[0-9a-f]{32,128}$/';
-        $hex16 = '/^[0-9a-f]{16}$/';
+        $hexIdPrefix = '/^[0-9a-f]{8,64}$/i';
         $uuidLine = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s+([a-z0-9][a-z0-9._-]*)$/i';
         $nameOk = '/^[a-z0-9][a-z0-9._-]*$/';
 
@@ -218,9 +218,25 @@ class JohnnyCliService
 
             $colsTab = array_map('trim', explode("\t", $line));
             if (count($colsTab) >= 3
-                && preg_match($hex16, $colsTab[0])
+                && preg_match($hexIdPrefix, $colsTab[0])
                 && preg_match('/^\d{4}-\d{2}-\d{2}/', $colsTab[1])) {
                 foreach (array_map('trim', explode(',', $colsTab[2])) as $alias) {
+                    if ($alias !== '' && preg_match($nameOk, $alias)) {
+                        $names[] = $alias;
+                    }
+                }
+
+                continue;
+            }
+
+            if (preg_match('/^([0-9a-f]{8,64})\s+(\d{4}-\d{2}-\d{2})\s+(.+)$/i', $stripped, $m)) {
+                $rest = trim($m[3]);
+                if (preg_match('/\s{2,}/', $rest)) {
+                    $globalCell = preg_split('/\s{2,}/', $rest, 2)[0];
+                } else {
+                    $globalCell = $rest;
+                }
+                foreach (array_map('trim', explode(',', trim($globalCell))) as $alias) {
                     if ($alias !== '' && preg_match($nameOk, $alias)) {
                         $names[] = $alias;
                     }
