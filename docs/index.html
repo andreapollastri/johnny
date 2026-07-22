@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Johnny — Self-hosted S3 Storage Platform</title>
+  <meta name="description"
+    content="S3-compatible object storage on your own VPS — with automated backups, a web panel, a CLI, and a full REST API. Powered by Garage, secured by Caddy." />
+  <meta name="theme-color" content="#c47a1a" />
+  <link rel="canonical" href="https://johnny.web.ap.it/" />
+  <meta property="og:title" content="Johnny — Self-hosted S3 Storage Platform" />
+  <meta property="og:description"
+    content="S3-compatible object storage, automated SFTP backups, and an elegant web panel — in one install. Powered by Garage." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://johnny.web.ap.it/" />
+  <meta property="og:image" content="https://johnny.web.ap.it/img/light.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Johnny — Self-hosted S3 Storage Platform" />
+  <meta name="twitter:description"
+    content="S3-compatible object storage, automated SFTP backups, and an elegant web panel — in one install." />
+  <meta name="twitter:image" content="https://johnny.web.ap.it/img/light.jpg" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #14171e;
+      --ink-soft: #2a3040;
+      --muted: #5c6575;
+      --line: #c8cfd9;
+      --paper: #e9edf2;
+      --surface: #f4f6f9;
+      --white: #ffffff;
+      --signal: #c47a1a;
+      --signal-deep: #9a5f12;
+      --phosphor: #e8a84a;
+      --terminal: #14171e;
+      --pass: #1a7f4b;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --sans: "Source Sans 3", Georgia, sans-serif;
+      --display: "Space Grotesk", var(--sans);
+      --max: 1120px;
+      --docs-sidebar: 220px;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 5rem;
+    }
+
+    body {
+      font-family: var(--sans);
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.55;
+      font-size: 1.0625rem;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    code,
+    pre {
+      font-family: var(--mono);
+    }
+
+    .scan-field {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, rgba(196, 122, 26, 0.12), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 90% 18%, rgba(20, 23, 30, 0.06), transparent 50%),
+        linear-gradient(180deg, var(--surface) 0%, var(--paper) 40%, var(--paper) 100%);
+    }
+
+    .scan-field::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(20, 23, 30, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20, 23, 30, 0.035) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: linear-gradient(180deg, #000 0%, transparent 70%);
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.9rem 1.5rem;
+      background: rgba(244, 246, 249, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav-brand {
+      display: block;
+      width: 7.5rem;
+      line-height: 0;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .nav-brand svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--ink-soft);
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--signal);
+    }
+
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 0.85rem;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: var(--white) !important;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .nav-cta:hover {
+      background: var(--signal);
+      border-color: var(--signal);
+    }
+
+    .hero {
+      position: relative;
+      padding: 3.5rem 0 0;
+    }
+
+    .hero-copy {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 1.5rem 2.5rem;
+    }
+
+    .hero-brand {
+      width: min(100%, 28rem);
+      line-height: 0;
+      animation: rise 0.7s ease both;
+    }
+
+    .hero-brand svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .hero-copy h1 {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: clamp(1.45rem, 3.2vw, 2rem);
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin: 1.1rem 0 0.7rem;
+      animation: rise 0.7s 0.08s ease both;
+    }
+
+    .hero-copy p {
+      color: var(--muted);
+      font-size: 1.1rem;
+      line-height: 1.5;
+      max-width: 38rem;
+      animation: rise 0.7s 0.14s ease both;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+      animation: rise 0.7s 0.2s ease both;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      padding: 0.8rem 1.25rem;
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.2s, color 0.2s, border-color 0.2s;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--signal);
+      color: var(--white);
+      border-color: var(--signal);
+    }
+
+    .btn-primary:hover {
+      background: var(--signal-deep);
+      border-color: var(--signal-deep);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--ink);
+      border-color: var(--ink);
+    }
+
+    .btn-secondary:hover {
+      background: var(--ink);
+      color: var(--white);
+    }
+
+    .hero-visual {
+      position: relative;
+      width: 100%;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+      background: var(--terminal);
+      color: #d7dde6;
+      animation: rise 0.8s 0.22s ease both;
+    }
+
+    .hero-visual::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(196, 122, 26, 0.04) 3px,
+        rgba(196, 122, 26, 0.04) 6px
+      );
+      animation: scan 10s linear infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .hero-visual-inner {
+      position: relative;
+      z-index: 1;
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    .hero-visual-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: #8b95a5;
+    }
+
+    .hero-visual-bar i {
+      flex: 0 0 8px;
+      width: 8px;
+      height: 8px;
+      display: block;
+      background: var(--phosphor);
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+
+    .hero-visual pre {
+      margin: 0;
+      padding: 1.25rem 0 1.75rem;
+      font-size: clamp(0.72rem, 1.6vw, 0.85rem);
+      line-height: 1.75;
+      white-space: pre;
+      overflow-x: auto;
+      tab-size: 2;
+    }
+
+    .t-ok {
+      color: #3dbe7a;
+    }
+
+    .t-accent {
+      color: var(--phosphor);
+    }
+
+    .t-dim {
+      color: #7a8494;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    @keyframes scan {
+      from {
+        transform: translateY(0);
+      }
+      to {
+        transform: translateY(40px);
+      }
+    }
+
+    @keyframes pulse {
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.35;
+      }
+    }
+
+    section {
+      padding: 5rem 1.5rem;
+    }
+
+    .section-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+    }
+
+    .section-kicker {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--signal);
+      margin-bottom: 0.75rem;
+    }
+
+    .section-title {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: clamp(1.85rem, 4vw, 2.6rem);
+      letter-spacing: -0.035em;
+      line-height: 1.1;
+      margin-bottom: 0.85rem;
+    }
+
+    .section-lead {
+      color: var(--muted);
+      max-width: 36rem;
+      font-size: 1.1rem;
+      margin-bottom: 2rem;
+    }
+
+    .band {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: var(--white);
+    }
+
+    .coverage-list {
+      display: grid;
+      gap: 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .coverage-row {
+      display: grid;
+      gap: 0.35rem;
+      padding: 1.15rem 0;
+      border-bottom: 1px solid var(--line);
+      align-items: baseline;
+    }
+
+    @media (min-width: 760px) {
+      .coverage-row {
+        grid-template-columns: 4.5rem 13rem 1fr auto;
+        gap: 1.25rem;
+      }
+    }
+
+    .coverage-row .n {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .coverage-row .name {
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .coverage-row .desc {
+      color: var(--muted);
+      font-size: 0.98rem;
+    }
+
+    .coverage-row .tag {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--signal);
+      white-space: nowrap;
+    }
+
+    .install-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    @media (min-width: 800px) {
+      .install-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .code-block {
+      background: var(--terminal);
+      color: #d7dde6;
+      border: 1px solid #2a3040;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.55rem 0.85rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: #8b95a5;
+    }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #c5ccd6;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      padding: 0.2rem 0.5rem;
+      cursor: pointer;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--phosphor);
+      color: #fff;
+    }
+
+    .code-block pre {
+      padding: 1rem 0.95rem;
+      font-size: 0.82rem;
+      line-height: 1.65;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    .tok-cmd {
+      color: #7ec8ff;
+    }
+
+    .tok-arg {
+      color: #ffb4c0;
+    }
+
+    .tok-flag {
+      color: #f0b429;
+    }
+
+    .tok-cmt {
+      color: #6b7482;
+    }
+
+    .link-inline {
+      color: var(--signal);
+      font-weight: 600;
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    .link-inline:hover {
+      border-bottom-color: var(--signal);
+    }
+
+    .steps {
+      display: grid;
+      gap: 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .step {
+      display: grid;
+      gap: 0.75rem;
+      padding: 1.5rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    @media (min-width: 700px) {
+      .step {
+        grid-template-columns: 3rem 1fr;
+        gap: 1.5rem;
+        align-items: start;
+      }
+    }
+
+    .step-n {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--signal);
+      font-weight: 600;
+    }
+
+    .step h3 {
+      font-family: var(--display);
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+    }
+
+    .step p {
+      color: var(--muted);
+      margin-bottom: 0.85rem;
+      max-width: 40rem;
+    }
+
+    .panel-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .panel-tab {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.45rem 0.75rem;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .panel-tab:hover,
+    .panel-tab.active {
+      color: var(--ink);
+      border-color: var(--ink);
+      background: var(--white);
+    }
+
+    .browser-frame {
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      overflow: hidden;
+    }
+
+    .browser-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: #8b95a5;
+    }
+
+    .browser-bar i {
+      width: 8px;
+      height: 8px;
+      background: var(--phosphor);
+      display: block;
+    }
+
+    .browser-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: var(--surface);
+    }
+
+    .panel-caption {
+      margin-top: 0.85rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    #docs {
+      background: var(--white);
+      border-top: 1px solid var(--line);
+      padding-top: 4rem;
+      padding-bottom: 5rem;
+    }
+
+    .docs-layout {
+      max-width: var(--max);
+      margin: 0 auto;
+      display: grid;
+      gap: 2.5rem;
+      padding: 0 1.5rem;
+    }
+
+    @media (min-width: 900px) {
+      .docs-layout {
+        grid-template-columns: var(--docs-sidebar) minmax(0, 1fr);
+        gap: 3rem;
+        align-items: start;
+      }
+    }
+
+    .docs-toc {
+      font-size: 0.9rem;
+    }
+
+    @media (min-width: 900px) {
+      .docs-toc {
+        position: sticky;
+        top: 5rem;
+      }
+    }
+
+    .docs-toc strong {
+      display: block;
+      font-family: var(--display);
+      font-size: 0.95rem;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.85rem;
+    }
+
+    .docs-toc ol {
+      list-style: none;
+      display: grid;
+      gap: 0.35rem;
+      border-left: 2px solid var(--line);
+      padding-left: 0.85rem;
+    }
+
+    .docs-toc a {
+      text-decoration: none;
+      color: var(--muted);
+      display: block;
+      padding: 0.2rem 0;
+      transition: color 0.15s;
+    }
+
+    .docs-toc a:hover,
+    .docs-toc a.active {
+      color: var(--signal);
+    }
+
+    .docs-content {
+      min-width: 0;
+    }
+
+    .docs-content > header {
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .doc-block {
+      margin-bottom: 3rem;
+      scroll-margin-top: 5.5rem;
+    }
+
+    .doc-block h3 {
+      font-family: var(--display);
+      font-size: 1.45rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.75rem;
+    }
+
+    .doc-block h4 {
+      font-family: var(--sans);
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    .doc-block p,
+    .doc-block li {
+      color: var(--ink-soft);
+      max-width: 42rem;
+    }
+
+    .doc-block p + p {
+      margin-top: 0.85rem;
+    }
+
+    .doc-block ul,
+    .doc-block ol {
+      margin: 0.75rem 0 0 1.2rem;
+    }
+
+    .doc-block li + li {
+      margin-top: 0.35rem;
+    }
+
+    .doc-block .code-block {
+      margin-top: 1rem;
+    }
+
+    .callout {
+      margin-top: 1rem;
+      padding: 0.9rem 1rem;
+      border-left: 3px solid var(--signal);
+      background: var(--paper);
+      color: var(--ink-soft);
+      font-size: 0.95rem;
+      max-width: 42rem;
+    }
+
+    .table-wrap {
+      margin-top: 1rem;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+    }
+
+    table.docs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    table.docs-table th,
+    table.docs-table td {
+      text-align: left;
+      padding: 0.7rem 0.85rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    table.docs-table th {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--paper);
+      font-weight: 500;
+    }
+
+    table.docs-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    table.docs-table td:first-child {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: space-between;
+      align-items: center;
+      max-width: var(--max);
+      margin: 0 auto;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    footer a {
+      color: var(--ink-soft);
+      text-decoration: none;
+      margin-left: 1rem;
+    }
+
+    footer a:hover {
+      color: var(--signal);
+    }
+
+    @media (max-width: 600px) {
+      .nav-links a:not(.nav-cta) {
+        display: none;
+      }
+    }
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Johnny",
+    "headline": "Self-hosted S3 Storage Platform",
+    "description": "S3-compatible object storage, automated SFTP backups, and an elegant web panel — in one install. Powered by Garage.",
+    "url": "https://johnny.web.ap.it",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux",
+    "softwareVersion": "1.0.5",
+    "license": "https://github.com/andreapollastri/johnny/blob/main/LICENSE",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "author": { "@type": "Person", "name": "Andrea Pollastri", "url": "https://github.com/andreapollastri" },
+    "codeRepository": "https://github.com/andreapollastri/johnny"
+  }
+  </script>
+</head>
+
+<body>
+  <div class="scan-field" aria-hidden="true"></div>
+
+  <nav class="nav" aria-label="Primary">
+    <a class="nav-brand" href="/" aria-label="Johnny">
+      <svg viewBox="0 0 280 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <text x="0" y="56" font-family="Space Grotesk, sans-serif" font-size="58" font-weight="700"
+          letter-spacing="-0.04em">
+          <tspan fill="#14171e">JOHN</tspan><tspan fill="#c47a1a">NY</tspan>
+        </text>
+      </svg>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#panel">Panel</a>
+      <a href="#docs">Docs</a>
+      <a class="nav-cta" href="https://github.com/andreapollastri/johnny" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-copy">
+      <div class="hero-brand" role="img" aria-label="Johnny">
+        <svg viewBox="0 0 280 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <text x="0" y="56" font-family="Space Grotesk, sans-serif" font-size="58" font-weight="700"
+            letter-spacing="-0.04em">
+            <tspan fill="#14171e">JOHN</tspan><tspan fill="#c47a1a">NY</tspan>
+          </text>
+        </svg>
+      </div>
+      <h1>Your storage.<br>Your rules.</h1>
+      <p>
+        S3-compatible object storage on your own VPS — with automated backups, a web panel, a CLI,
+        and a full REST API. Powered by Garage, secured by Caddy.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#install">Get started</a>
+        <a class="btn btn-secondary" href="#docs">Read the docs</a>
+      </div>
+    </div>
+
+    <div class="hero-visual" aria-hidden="true">
+      <div class="hero-visual-inner">
+        <div class="hero-visual-bar"><i></i><span>johnny · autoinstall</span></div>
+        <pre><span class="t-dim"># Clone and install</span>
+<span class="t-accent">$</span> sudo git clone https://github.com/andreapollastri/johnny /opt/johnny
+<span class="t-accent">$</span> cd /opt/johnny
+<span class="t-accent">$</span> sudo bash scripts/autoinstall.sh
+
+<span class="t-dim"># You're ready</span>
+<span class="t-accent">$</span> source /etc/johnny/credentials/default-s3.env
+<span class="t-accent">$</span> aws s3 ls --endpoint-url "$AWS_ENDPOINT_URL"
+
+<span class="t-ok">OK</span>  Garage · Caddy TLS · nightly backup cron</pre>
+      </div>
+    </div>
+  </header>
+
+  <section id="features" class="band">
+    <div class="section-inner">
+      <div class="section-kicker">Features</div>
+      <h2 class="section-title">Everything you need,<br>nothing you don't.</h2>
+      <p class="section-lead">
+        Production-ready object storage with batteries included. No vendor lock-in, no hidden costs.
+      </p>
+
+      <div class="coverage-list">
+        <div class="coverage-row">
+          <span class="n">01</span>
+          <span class="name">S3-compatible</span>
+          <span class="desc">Powered by Garage — works with any AWS SDK, the <code>aws</code> CLI, or S3 client.</span>
+          <span class="tag">Storage</span>
+        </div>
+        <div class="coverage-row">
+          <span class="n">02</span>
+          <span class="name">One-command install</span>
+          <span class="desc">Provisions Garage, Let's Encrypt TLS via Caddy, rclone, and nightly cron in one run.</span>
+          <span class="tag">Ops</span>
+        </div>
+        <div class="coverage-row">
+          <span class="n">03</span>
+          <span class="name">Automated backups</span>
+          <span class="desc">Nightly SFTP sync with date-based retention. Optional S3-to-S3 replication.</span>
+          <span class="tag">Backup</span>
+        </div>
+        <div class="coverage-row">
+          <span class="n">04</span>
+          <span class="name">Web panel + 2FA</span>
+          <span class="desc">Optional Laravel dashboard for buckets, objects, and keys — TOTP and SMTP reset.</span>
+          <span class="tag">UI</span>
+        </div>
+        <div class="coverage-row">
+          <span class="n">05</span>
+          <span class="name">Panel REST API</span>
+          <span class="desc">11 JSON endpoints, one-call tenant provisioning, Swagger UI, and OpenAPI spec.</span>
+          <span class="tag">API</span>
+        </div>
+        <div class="coverage-row">
+          <span class="n">06</span>
+          <span class="name">Self-updating</span>
+          <span class="desc">Nightly cron pulls the latest release, runs migrations, and refreshes the panel.</span>
+          <span class="tag">Ops</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="section-inner">
+      <div class="section-kicker">Install</div>
+      <h2 class="section-title">Up and running in minutes.</h2>
+      <p class="section-lead">
+        Clone outside <code>/root</code> so the Laravel panel can run as <code>www-data</code>. Ubuntu 24.04 LTS.
+      </p>
+
+      <div class="steps">
+        <div class="step">
+          <span class="step-n">01</span>
+          <div>
+            <h3>Clone the repository</h3>
+            <p>Pick a path like <code>/opt/johnny</code>.</p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>bash</span>
+                <button class="copy-btn" type="button"
+                  data-copy="sudo git clone https://github.com/andreapollastri/johnny /opt/johnny">Copy</button>
+              </div>
+              <pre><span class="tok-cmd">sudo git clone</span> https://github.com/andreapollastri/johnny /opt/johnny</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <span class="step-n">02</span>
+          <div>
+            <h3>Run the autoinstaller</h3>
+            <p>Interactive wizard for Garage, Caddy, rclone, cron, and the optional panel.</p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>bash</span>
+                <button class="copy-btn" type="button"
+                  data-copy="cd /opt/johnny && sudo bash scripts/autoinstall.sh">Copy</button>
+              </div>
+              <pre><span class="tok-cmd">cd</span> /opt/johnny
+<span class="tok-cmd">sudo bash</span> scripts/autoinstall.sh</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <span class="step-n">03</span>
+          <div>
+            <h3>Load credentials and go</h3>
+            <p>Use any AWS SDK or S3 client against your endpoint.</p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>bash</span>
+                <button class="copy-btn" type="button"
+                  data-copy='source /etc/johnny/credentials/default-s3.env&#10;aws s3 ls --endpoint-url "$AWS_ENDPOINT_URL"'>Copy</button>
+              </div>
+              <pre><span class="tok-cmd">source</span> /etc/johnny/credentials/default-s3.env
+<span class="tok-cmd">aws s3 ls</span> <span class="tok-flag">--endpoint-url</span> "$AWS_ENDPOINT_URL"</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel" class="band">
+    <div class="section-inner">
+      <div class="section-kicker">Web panel</div>
+      <h2 class="section-title">A panel you'll actually use.</h2>
+      <p class="section-lead">
+        Monitor storage, manage buckets and keys, issue API tokens — light or dark, secured with TOTP.
+      </p>
+
+      <div class="panel-tabs" role="tablist" aria-label="Panel screenshots">
+        <button type="button" class="panel-tab active" data-shot="img/light.jpg"
+          data-caption="Dashboard — storage overview &amp; top buckets" role="tab" aria-selected="true">Dashboard</button>
+        <button type="button" class="panel-tab" data-shot="img/dark.jpg"
+          data-caption="Dashboard — built-in dark mode" role="tab" aria-selected="false">Dark mode</button>
+        <button type="button" class="panel-tab" data-shot="img/buckets.jpg"
+          data-caption="Buckets — create, browse &amp; delete" role="tab" aria-selected="false">Buckets</button>
+        <button type="button" class="panel-tab" data-shot="img/settings.jpg"
+          data-caption="Settings — 2FA &amp; Sanctum API tokens" role="tab" aria-selected="false">Settings</button>
+        <button type="button" class="panel-tab" data-shot="img/api.jpg"
+          data-caption="Swagger UI — explore every endpoint" role="tab" aria-selected="false">API docs</button>
+      </div>
+
+      <div class="browser-frame">
+        <div class="browser-bar"><i></i><span>s3.your-site.test</span></div>
+        <img id="panelShot" src="img/light.jpg" alt="Johnny web panel — storage dashboard" width="1473" height="1325"
+          loading="lazy" />
+      </div>
+      <p class="panel-caption" id="panelCaption">Dashboard — storage overview &amp; top buckets</p>
+    </div>
+  </section>
+
+  <section id="docs">
+    <div class="docs-layout">
+      <aside class="docs-toc" aria-label="Documentation contents">
+        <strong>Documentation</strong>
+        <ol>
+          <li><a href="#doc-overview">Overview</a></li>
+          <li><a href="#doc-requirements">Requirements</a></li>
+          <li><a href="#doc-install">Installation</a></li>
+          <li><a href="#doc-panel">Web panel</a></li>
+          <li><a href="#doc-cli">CLI</a></li>
+          <li><a href="#doc-backups">Backups</a></li>
+          <li><a href="#doc-api">Panel API</a></li>
+          <li><a href="#doc-laravel">Laravel disk</a></li>
+          <li><a href="#doc-updates">Updates</a></li>
+          <li><a href="#doc-security">Security</a></li>
+          <li><a href="#doc-config">Configuration</a></li>
+        </ol>
+      </aside>
+
+      <div class="docs-content">
+        <header>
+          <div class="section-kicker">Docs</div>
+          <h2 class="section-title">From zero to objects on your VPS.</h2>
+          <p class="section-lead" style="margin-bottom:0">
+            Install, operate, and integrate Johnny with the CLI, panel, and REST API.
+          </p>
+        </header>
+
+        <article class="doc-block" id="doc-overview">
+          <h3>Overview</h3>
+          <p>
+            Johnny wraps <a class="link-inline" href="https://garagehq.deuxfleurs.fr/" target="_blank"
+              rel="noopener">Garage</a> with production-ready automation: TLS via Caddy, nightly
+            SFTP backups with retention, a <code>johnny</code> CLI, and an optional Laravel web panel
+            with two-factor authentication.
+          </p>
+          <p>
+            Orchestration runs only on your <strong>primary VPS</strong> (push model). Backup servers
+            only need SSH/SFTP and disk space.
+          </p>
+        </article>
+
+        <article class="doc-block" id="doc-requirements">
+          <h3>Requirements</h3>
+          <ul>
+            <li><strong>Ubuntu 24.04 LTS</strong> on the primary VPS</li>
+            <li><strong>DNS</strong> <code>A</code>/<code>AAAA</code> pointing your hostname at the server before install (Let's Encrypt)</li>
+            <li>For each backup target: <strong>SSH/SFTP</strong> reachable from the primary, with write access under the remote path</li>
+          </ul>
+        </article>
+
+        <article class="doc-block" id="doc-install">
+          <h3>Installation</h3>
+          <p>
+            Prefer the autoinstaller. It installs dependencies, starts Garage, creates the
+            <code>default</code> bucket and keys, configures Caddy TLS, writes
+            <code>/etc/johnny/backup.json</code>, installs nightly cron, and can optionally install the panel.
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy="sudo mkdir -p /opt && sudo git clone https://github.com/andreapollastri/johnny /opt/johnny&#10;cd /opt/johnny&#10;sudo bash scripts/autoinstall.sh">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">sudo mkdir -p</span> /opt &amp;&amp; <span class="tok-cmd">sudo git clone</span> https://github.com/andreapollastri/johnny /opt/johnny
+<span class="tok-cmd">cd</span> /opt/johnny
+<span class="tok-cmd">sudo bash</span> scripts/autoinstall.sh</pre>
+          </div>
+
+          <h4>Manual install</h4>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy="sudo bash scripts/install.sh&#10;sudo systemctl start johnny-garage&#10;sudo bash scripts/bootstrap-single-node.sh">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">sudo bash</span> scripts/install.sh
+<span class="tok-cmd">sudo systemctl start</span> johnny-garage
+<span class="tok-cmd">sudo bash</span> scripts/bootstrap-single-node.sh</pre>
+          </div>
+          <p style="margin-top:0.85rem">
+            Then configure TLS yourself — see <code>config/caddy-johnny.caddy.example</code> or
+            <code>config/nginx-johnny-s3.conf.example</code>.
+          </p>
+        </article>
+
+        <article class="doc-block" id="doc-panel">
+          <h3>Web panel</h3>
+          <p>
+            Optional Laravel dashboard for buckets, objects, and Garage API keys. If you skipped it
+            during autoinstall:
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy="sudo bash scripts/install-panel.sh /opt/johnny https://panel.example.com">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">sudo bash</span> scripts/install-panel.sh /opt/johnny https://panel.example.com</pre>
+          </div>
+
+          <h4>Create an admin</h4>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy="sudo -u www-data php /opt/johnny/panel/artisan johnny:admin you@example.com 'strong-password'">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">sudo -u www-data php</span> /opt/johnny/panel/artisan johnny:admin you@example.com 'strong-password'</pre>
+          </div>
+          <p style="margin-top:0.85rem">
+            Open the panel hostname, sign in, then enable <strong>TOTP 2FA</strong> under Settings.
+          </p>
+
+          <h4>SMTP for password reset</h4>
+          <p>
+            Default <code>MAIL_MAILER=log</code> only writes to the Laravel log. Set SMTP in
+            <code>panel/.env</code>, then rebuild the config cache:
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy="sudo -u www-data php /opt/johnny/panel/artisan config:cache">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">sudo -u www-data php</span> /opt/johnny/panel/artisan config:cache</pre>
+          </div>
+        </article>
+
+        <article class="doc-block" id="doc-cli">
+          <h3>CLI</h3>
+          <div class="table-wrap">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>Command</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>johnny version</code></td>
+                  <td>Print installed version</td>
+                </tr>
+                <tr>
+                  <td><code>johnny status</code></td>
+                  <td>Garage cluster status</td>
+                </tr>
+                <tr>
+                  <td><code>johnny update [--pull]</code></td>
+                  <td>Update installation</td>
+                </tr>
+                <tr>
+                  <td><code>johnny bucket list|create</code></td>
+                  <td>List or create buckets</td>
+                </tr>
+                <tr>
+                  <td><code>johnny key list|create</code></td>
+                  <td>List or create API keys</td>
+                </tr>
+                <tr>
+                  <td><code>johnny backup list|create|delete|run</code></td>
+                  <td>Manage SFTP backup targets</td>
+                </tr>
+                <tr>
+                  <td><code>johnny backup set-retention N</code></td>
+                  <td>Keep dated folders for N days (default 90)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            Prefer <code>sudo -u johnny johnny …</code> for key and bucket mutations that write Garage state.
+          </div>
+        </article>
+
+        <article class="doc-block" id="doc-backups">
+          <h3>Backups</h3>
+          <p>
+            Nightly job (03:00) uses rclone to sync every bucket to one or more SFTP targets under
+            a dated folder layout. Retention deletes <code>YYYY-MM-DD</code> folders older than
+            <code>retention_days</code>.
+          </p>
+          <div class="code-block">
+            <div class="code-header"><span>layout</span></div>
+            <pre>johnny-backups/
+  2026-04-03/
+    default/
+    my-bucket/
+  2026-04-04/
+    default/
+    my-bucket/</pre>
+          </div>
+          <p style="margin-top:0.85rem">
+            Config: <code>/etc/johnny/backup.json</code> (mode <code>600</code>). Logs:
+            <code>/var/log/johnny-nightly.log</code>.
+          </p>
+
+          <h4>S3-to-S3 replication</h4>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy="cp config/replication/media-to-eu.env.example config/replication/media-to-eu.env&#10;sudo bash scripts/replicate-run.sh config/replication/media-to-eu.env">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">cp</span> config/replication/media-to-eu.env.example config/replication/media-to-eu.env
+<span class="tok-cmt"># edit credentials, then:</span>
+<span class="tok-cmd">sudo bash</span> scripts/replicate-run.sh config/replication/media-to-eu.env</pre>
+          </div>
+        </article>
+
+        <article class="doc-block" id="doc-api">
+          <h3>Panel API</h3>
+          <p>
+            Secured with Laravel Sanctum personal access tokens. Interactive docs at
+            <code>/api/docs</code>, OpenAPI at <code>/api/openapi.yaml</code>.
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — create token</span>
+              <button class="copy-btn" type="button"
+                data-copy="sudo -u www-data php /opt/johnny/panel/artisan johnny:api-token you@example.com --name=provisioning">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">sudo -u www-data php</span> /opt/johnny/panel/artisan johnny:api-token you@example.com <span class="tok-flag">--name</span>=provisioning</pre>
+          </div>
+
+          <h4>Provision bucket + key</h4>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy='curl -sS -X POST "https://panel.example.com/api/buckets/provision" -H "Authorization: Bearer YOUR_TOKEN" -H "Accept: application/json" -H "Content-Type: application/json" -d '"'"'{"bucket":"customer-orders"}'"'"''>Copy</button>
+            </div>
+            <pre><span class="tok-cmd">curl</span> -sS -X POST \
+  "https://panel.example.com/api/buckets/provision" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"customer-orders"}'</pre>
+          </div>
+
+          <div class="table-wrap">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Path</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>GET</td>
+                  <td><code>/api/buckets</code></td>
+                  <td>List buckets</td>
+                </tr>
+                <tr>
+                  <td>POST</td>
+                  <td><code>/api/buckets</code></td>
+                  <td>Create a bucket</td>
+                </tr>
+                <tr>
+                  <td>GET</td>
+                  <td><code>/api/buckets/{bucket}</code></td>
+                  <td>Metadata &amp; keys</td>
+                </tr>
+                <tr>
+                  <td>DEL</td>
+                  <td><code>/api/buckets/{bucket}</code></td>
+                  <td>Delete empty bucket</td>
+                </tr>
+                <tr>
+                  <td>GET / POST / DEL</td>
+                  <td><code>/api/keys</code></td>
+                  <td>List, create, lookup, delete keys</td>
+                </tr>
+                <tr>
+                  <td>POST / DEL</td>
+                  <td><code>/api/buckets/{b}/keys…</code></td>
+                  <td>Grant or revoke key access</td>
+                </tr>
+                <tr>
+                  <td>POST</td>
+                  <td><code>/api/buckets/provision</code></td>
+                  <td>Bucket + key + credentials in one call</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="doc-block" id="doc-laravel">
+          <h3>Laravel disk</h3>
+          <p>
+            Compatible with Laravel's S3 filesystem driver. Install the Flysystem adapter, paste
+            credentials into <code>.env</code>, and store files.
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button"
+                data-copy='composer require league/flysystem-aws-s3-v3 "^3.0" --with-all-dependencies'>Copy</button>
+            </div>
+            <pre><span class="tok-cmd">composer require</span> league/flysystem-aws-s3-v3 <span class="tok-arg">"^3.0"</span> <span class="tok-flag">--with-all-dependencies</span></pre>
+          </div>
+          <div class="code-block">
+            <div class="code-header"><span>.env</span></div>
+            <pre><span class="tok-flag">FILESYSTEM_DISK</span>=s3
+<span class="tok-flag">AWS_ACCESS_KEY_ID</span>=GK....123
+<span class="tok-flag">AWS_SECRET_ACCESS_KEY</span>=012...XYZ
+<span class="tok-flag">AWS_DEFAULT_REGION</span>=johnny
+<span class="tok-flag">AWS_BUCKET</span>=my-bucket
+<span class="tok-flag">AWS_ENDPOINT</span>=https://s3.my-domain.com
+<span class="tok-flag">AWS_USE_PATH_STYLE_ENDPOINT</span>=true</pre>
+          </div>
+          <div class="code-block">
+            <div class="code-header"><span>php</span></div>
+            <pre>Storage::disk('s3')->put('avatars/photo.jpg', $contents);</pre>
+          </div>
+          <p style="margin-top:0.85rem">
+            The provisioning API returns the same keys in an <code>env</code> map for automated tenant onboarding.
+          </p>
+        </article>
+
+        <article class="doc-block" id="doc-updates">
+          <h3>Updates</h3>
+          <p>
+            Repo path is saved in <code>/etc/johnny/repo.path</code>. Nightly cron runs
+            <code>johnny update --pull</code> at 02:30.
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+              <button class="copy-btn" type="button" data-copy="sudo johnny update --pull">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">--pull</span></pre>
+          </div>
+          <p style="margin-top:0.85rem">
+            Pulls the latest release, syncs scripts, runs Composer + migrations + cache rebuild when
+            the panel is present, and applies numbered scripts from <code>scripts/migrations/</code>.
+            Log: <code>/var/log/johnny-update.log</code>.
+          </p>
+        </article>
+
+        <article class="doc-block" id="doc-security">
+          <h3>Security</h3>
+          <ul>
+            <li>Restrict <code>/etc/johnny</code> (especially <code>backup.json</code> and <code>credentials/</code>) — defaults are already <code>600</code>/<code>700</code></li>
+            <li>Prefer SSH keys on backup servers; password auth is documented for simplicity</li>
+            <li>Firewall: expose <strong>443</strong> (and <strong>80</strong> for ACME); restrict <strong>22</strong> to trusted IPs</li>
+            <li><code>rclone sync</code> can delete extras under each dated prefix — review the rclone sync docs</li>
+          </ul>
+        </article>
+
+        <article class="doc-block" id="doc-config">
+          <h3>Configuration</h3>
+          <div class="table-wrap">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>Path</th>
+                  <th>Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>/etc/johnny/garage.toml</code></td>
+                  <td>Garage configuration</td>
+                </tr>
+                <tr>
+                  <td><code>/etc/johnny/backup.json</code></td>
+                  <td>Backup targets and retention</td>
+                </tr>
+                <tr>
+                  <td><code>/etc/johnny/credentials/default-s3.env</code></td>
+                  <td>App S3 credentials</td>
+                </tr>
+                <tr>
+                  <td><code>/etc/johnny/credentials/backup-internal-s3.env</code></td>
+                  <td>Internal backup S3 credentials</td>
+                </tr>
+                <tr>
+                  <td><code>/etc/johnny/repo.path</code></td>
+                  <td>Path to the Johnny repo</td>
+                </tr>
+                <tr>
+                  <td><code>/etc/cron.d/johnny-nightly</code></td>
+                  <td>Update + backup schedule</td>
+                </tr>
+                <tr>
+                  <td><code>panel/.env</code></td>
+                  <td>Laravel panel environment</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="margin-top:1rem">
+            Source and issues:
+            <a class="link-inline" href="https://github.com/andreapollastri/johnny" target="_blank"
+              rel="noopener">github.com/andreapollastri/johnny</a>
+            · MIT License · v1.0.5
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      &copy; 2026 <a href="https://andreapollastri.net" target="_blank" rel="noopener" style="margin-left:0">Andrea
+        Pollastri</a> — MIT License · v1.0.5
+    </div>
+    <div>
+      <a href="https://github.com/andreapollastri/johnny" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://cipi.sh" target="_blank" rel="noopener">cipi.sh</a>
+      <a href="#docs">Docs</a>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll(".copy-btn[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const raw = btn.getAttribute("data-copy") || "";
+        const text = raw
+          .replace(/&#10;/g, "\n")
+          .replace(/&amp;/g, "&")
+          .replace(/&gt;/g, ">")
+          .replace(/&lt;/g, "<")
+          .replace(/\\n/g, "\n");
+        try {
+          await navigator.clipboard.writeText(text);
+          const prev = btn.textContent;
+          btn.textContent = "Copied";
+          setTimeout(() => { btn.textContent = prev; }, 1400);
+        } catch (_) {
+          btn.textContent = "Failed";
+          setTimeout(() => { btn.textContent = "Copy"; }, 1400);
+        }
+      });
+    });
+
+    const shot = document.getElementById("panelShot");
+    const caption = document.getElementById("panelCaption");
+    document.querySelectorAll(".panel-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".panel-tab").forEach((t) => {
+          t.classList.remove("active");
+          t.setAttribute("aria-selected", "false");
+        });
+        tab.classList.add("active");
+        tab.setAttribute("aria-selected", "true");
+        if (shot) shot.src = tab.getAttribute("data-shot") || "";
+        if (caption) caption.innerHTML = tab.getAttribute("data-caption") || "";
+      });
+    });
+
+    const tocLinks = [...document.querySelectorAll(".docs-toc a")];
+    const sections = tocLinks
+      .map((a) => document.querySelector(a.getAttribute("href")))
+      .filter(Boolean);
+
+    const tocObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const id = "#" + entry.target.id;
+          tocLinks.forEach((link) => {
+            link.classList.toggle("active", link.getAttribute("href") === id);
+          });
+        });
+      },
+      { rootMargin: "-20% 0px -65% 0px", threshold: 0 }
+    );
+
+    sections.forEach((section) => tocObserver.observe(section));
+  </script>
+
+  <script async src="https://stats.web.ap.it/i/49628eb0-43be-4bc1-ab98-ad274c4cb416.js"></script>
+  <noscript><img src="https://stats.web.ap.it/collect/pixel.gif?k=49628eb0-43be-4bc1-ab98-ad274c4cb416&p=/" width="1"
+      height="1" alt="" /></noscript>
+</body>
+
+</html>
