@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 — Johnny</title>
+  <meta name="description" content="Page not found. Return to Johnny." />
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#c47a1a" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;600&family=Space+Grotesk:wght@600;700&display=swap"
+    rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #14171e;
+      --muted: #5c6575;
+      --line: #c8cfd9;
+      --paper: #e9edf2;
+      --surface: #f4f6f9;
+      --signal: #c47a1a;
+      --phosphor: #e8a84a;
+      --terminal: #14171e;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --sans: "Source Sans 3", Georgia, sans-serif;
+      --display: "Space Grotesk", var(--sans);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--sans);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background:
+        radial-gradient(ellipse 70% 45% at 8% -8%, rgba(196, 122, 26, 0.12), transparent 55%),
+        linear-gradient(180deg, var(--surface), var(--paper));
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+      background: rgba(244, 246, 249, 0.88);
+      backdrop-filter: blur(12px);
+    }
+
+    .nav-brand {
+      display: block;
+      width: 7.5rem;
+      line-height: 0;
+      text-decoration: none;
+    }
+
+    .nav-brand svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .nav a:not(.nav-brand) {
+      color: var(--signal);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+    }
+
+    .panel {
+      max-width: 28rem;
+      width: 100%;
+    }
+
+    .kicker {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--signal);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: clamp(2rem, 6vw, 2.8rem);
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin-bottom: 0.75rem;
+    }
+
+    p {
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      font-size: 1.05rem;
+    }
+
+    .code {
+      background: var(--terminal);
+      color: #d7dde6;
+      border: 1px solid #2a3040;
+      padding: 1rem 0.95rem;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.65;
+      margin-bottom: 1.5rem;
+    }
+
+    .code .dim {
+      color: #7a8494;
+    }
+
+    .code .acc {
+      color: var(--phosphor);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.75rem 1.15rem;
+      background: var(--signal);
+      color: #fff;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid var(--signal);
+      transition: background 0.2s;
+    }
+
+    .btn:hover {
+      background: #9a5f12;
+      border-color: #9a5f12;
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="/" aria-label="Johnny">
+      <svg viewBox="0 0 280 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <text x="0" y="56" font-family="Space Grotesk, sans-serif" font-size="58" font-weight="700"
+          letter-spacing="-0.04em">
+          <tspan fill="#14171e">JOHN</tspan><tspan fill="#c47a1a">NY</tspan>
+        </text>
+      </svg>
+    </a>
+    <a href="/">Home</a>
+  </nav>
+
+  <main>
+    <div class="panel">
+      <div class="kicker">404</div>
+      <h1>Object not found.</h1>
+      <p>That path isn't in this bucket. Head back to the Johnny site.</p>
+      <div class="code" aria-hidden="true">
+        <span class="dim">$</span> aws s3 ls --endpoint-url "$AWS_ENDPOINT_URL"<br />
+        <span class="acc">NoSuchKey</span> <span class="dim">The specified key does not exist.</span>
+      </div>
+      <a class="btn" href="/">Back to Johnny</a>
+    </div>
+  </main>
+</body>
+
+</html>
