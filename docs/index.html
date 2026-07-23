@@ -270,13 +270,11 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 3px,
-        rgba(196, 122, 26, 0.04) 3px,
-        rgba(196, 122, 26, 0.04) 6px
-      );
+      background: repeating-linear-gradient(0deg,
+          transparent,
+          transparent 3px,
+          rgba(196, 122, 26, 0.04) 3px,
+          rgba(196, 122, 26, 0.04) 6px);
       animation: scan 10s linear infinite;
       pointer-events: none;
       z-index: 0;
@@ -337,6 +335,7 @@
         opacity: 0;
         transform: translateY(16px);
       }
+
       to {
         opacity: 1;
         transform: none;
@@ -347,16 +346,19 @@
       from {
         transform: translateY(0);
       }
+
       to {
         transform: translateY(40px);
       }
     }
 
     @keyframes pulse {
+
       0%,
       100% {
         opacity: 1;
       }
+
       50% {
         opacity: 0.35;
       }
@@ -702,7 +704,7 @@
       min-width: 0;
     }
 
-    .docs-content > header {
+    .docs-content>header {
       margin-bottom: 2.5rem;
       padding-bottom: 1.5rem;
       border-bottom: 1px solid var(--line);
@@ -734,7 +736,7 @@
       max-width: 42rem;
     }
 
-    .doc-block p + p {
+    .doc-block p+p {
       margin-top: 0.85rem;
     }
 
@@ -743,7 +745,7 @@
       margin: 0.75rem 0 0 1.2rem;
     }
 
-    .doc-block li + li {
+    .doc-block li+li {
       margin-top: 0.35rem;
     }
 
@@ -859,7 +861,8 @@
       <svg viewBox="0 0 280 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <text x="0" y="56" font-family="Space Grotesk, sans-serif" font-size="58" font-weight="700"
           letter-spacing="-0.04em">
-          <tspan fill="#14171e">JOHN</tspan><tspan fill="#c47a1a">NY</tspan>
+          <tspan fill="#14171e">JOHN</tspan>
+          <tspan fill="#c47a1a">NY</tspan>
         </text>
       </svg>
     </a>
@@ -878,7 +881,8 @@
         <svg viewBox="0 0 280 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <text x="0" y="56" font-family="Space Grotesk, sans-serif" font-size="58" font-weight="700"
             letter-spacing="-0.04em">
-            <tspan fill="#14171e">JOHN</tspan><tspan fill="#c47a1a">NY</tspan>
+            <tspan fill="#14171e">JOHN</tspan>
+            <tspan fill="#c47a1a">NY</tspan>
           </text>
         </svg>
       </div>
@@ -1029,9 +1033,10 @@
 
       <div class="panel-tabs" role="tablist" aria-label="Panel screenshots">
         <button type="button" class="panel-tab active" data-shot="img/light.jpg"
-          data-caption="Dashboard — storage overview &amp; top buckets" role="tab" aria-selected="true">Dashboard</button>
-        <button type="button" class="panel-tab" data-shot="img/dark.jpg"
-          data-caption="Dashboard — built-in dark mode" role="tab" aria-selected="false">Dark mode</button>
+          data-caption="Dashboard — storage overview &amp; top buckets" role="tab"
+          aria-selected="true">Dashboard</button>
+        <button type="button" class="panel-tab" data-shot="img/dark.jpg" data-caption="Dashboard — built-in dark mode"
+          role="tab" aria-selected="false">Dark mode</button>
         <button type="button" class="panel-tab" data-shot="img/buckets.jpg"
           data-caption="Buckets — create, browse &amp; delete" role="tab" aria-selected="false">Buckets</button>
         <button type="button" class="panel-tab" data-shot="img/settings.jpg"
@@ -1095,8 +1100,10 @@
           <h3>Requirements</h3>
           <ul>
             <li><strong>Ubuntu 24.04 LTS</strong> on the primary VPS</li>
-            <li><strong>DNS</strong> <code>A</code>/<code>AAAA</code> pointing your hostname at the server before install (Let's Encrypt)</li>
-            <li>For each backup target: <strong>SSH/SFTP</strong> reachable from the primary, with write access under the remote path</li>
+            <li><strong>DNS</strong> <code>A</code>/<code>AAAA</code> pointing your hostname at the server before
+              install (Let's Encrypt)</li>
+            <li>For each backup target: <strong>SSH/SFTP</strong> reachable from the primary, with write access under
+              the remote path</li>
           </ul>
         </article>
 
@@ -1396,9 +1403,11 @@
         <article class="doc-block" id="doc-security">
           <h3>Security</h3>
           <ul>
-            <li>Restrict <code>/etc/johnny</code> (especially <code>backup.json</code> and <code>credentials/</code>) — defaults are already <code>600</code>/<code>700</code></li>
+            <li>Restrict <code>/etc/johnny</code> (especially <code>backup.json</code> and <code>credentials/</code>) —
+              defaults are already <code>600</code>/<code>700</code></li>
             <li>Prefer SSH keys on backup servers; password auth is documented for simplicity</li>
-            <li>Firewall: expose <strong>443</strong> (and <strong>80</strong> for ACME); restrict <strong>22</strong> to trusted IPs</li>
+            <li>Firewall: expose <strong>443</strong> (and <strong>80</strong> for ACME); restrict <strong>22</strong>
+              to trusted IPs</li>
             <li><code>rclone sync</code> can delete extras under each dated prefix — review the rclone sync docs</li>
           </ul>
         </article>
