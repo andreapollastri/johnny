@@ -27,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/buckets/{bucket}/deny', [BucketController::class, 'deny'])->name('buckets.deny');
 
     Route::post('/buckets/{bucket}/objects', [ObjectController::class, 'store'])->name('objects.store');
+    Route::post('/buckets/{bucket}/folders', [ObjectController::class, 'storeFolder'])->name('objects.folder');
     Route::get('/buckets/{bucket}/objects/download', [ObjectController::class, 'download'])->name('objects.download');
     Route::delete('/buckets/{bucket}/objects', [ObjectController::class, 'destroy'])->name('objects.destroy');
 

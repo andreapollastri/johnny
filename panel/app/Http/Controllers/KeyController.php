@@ -21,15 +21,9 @@ class KeyController extends Controller
             $error = 'Could not run `johnny key list`. Ensure sudoers allows the PHP user to run `sudo -u johnny /usr/local/bin/johnny`.';
         }
 
-        $keys = collect($this->johnny->parseKeyList($output ?? ''))
-            ->reject(fn ($k) => in_array($k['name'], JohnnyCliService::SYSTEM_KEY_NAMES, true))
-            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
-            ->values()
-            ->all();
-
         return view('keys.index', [
             'error' => $error,
-            'keys' => $keys,
+            'keys' => $this->johnny->userKeys($this->johnny->parseKeyList($output ?? '')),
         ]);
     }
 
@@ -43,14 +37,18 @@ class KeyController extends Controller
             return back()->withErrors(['name' => 'This name is reserved for the system.'])->withInput();
         }
 
-        $result = $this->johnny->runJohnnyResult(['key', 'create', $validated['name']]);
+        $result = $this->johnny->createKey($validated['name']);
 
         if (! $result->successful()) {
-            return back()->withErrors(['name' => $result->errorOutput() ?: $result->output()])->withInput();
+            return back()->withErrors(['name' => $this->johnny->errorDetail($result, 'Key creation failed.')])->withInput();
         }
 
         return redirect()->route('keys.index')
-            ->with('key_create_output', $result->output())
+            ->with('new_key', [
+                'name' => $validated['name'],
+                'credentials' => $this->johnny->parseKeyCreateOutput($result->output()),
+                'raw' => $result->output(),
+            ])
             ->with('status', 'Key created. Grant bucket permissions from the bucket detail page.');
     }
 
@@ -60,14 +58,20 @@ class KeyController extends Controller
             'key_id' => ['required', 'string', 'max:128'],
         ]);
 
-        if ($this->johnny->isSystemKey($validated['key_id'])) {
+        // Garage resolves id prefixes too: only ever act on an exact, listed key id.
+        $keyId = $this->johnny->resolveCanonicalKeyId($validated['key_id']);
+        if ($keyId === null) {
+            return back()->withErrors(['key_id' => 'Key not found.']);
+        }
+
+        if ($this->johnny->isSystemKey($keyId)) {
             return back()->withErrors(['key_id' => 'System keys cannot be deleted.']);
         }
 
-        $result = $this->johnny->runJohnnyResult(['key', 'delete', '--yes', $validated['key_id']]);
+        $result = $this->johnny->deleteKey($keyId);
 
         if (! $result->successful()) {
-            return back()->withErrors(['key_id' => $result->errorOutput() ?: $result->output()]);
+            return back()->withErrors(['key_id' => $this->johnny->errorDetail($result, 'Key deletion failed.')]);
         }
 
         return redirect()->route('keys.index')->with('status', 'Key deleted.');

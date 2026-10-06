@@ -1,0 +1,16 @@
+==== BUCKET INFORMATION ====
+Bucket:          f1b17fa555341ee28c290a1da941c5a1632bc656e967aafb5ac3db18a9c10f0b
+Created:         2026-10-07 00:14:12.127 +02:00
+
+Size:            0 B (0 B)
+Objects:         0
+
+Website access:  false
+
+Global alias:    media
+
+==== KEYS FOR THIS BUCKET ====
+Permissions  Access key                                  Local aliases
+RWO          GK1f8592d58bb63acea45ff5c7  johnny-default  
+R            GK7c1b2d3e4f5a6b7c8d9e0f1a  johnny-backup   
+RW           GK5d510a5dc69f28e6b744a688  web-app         

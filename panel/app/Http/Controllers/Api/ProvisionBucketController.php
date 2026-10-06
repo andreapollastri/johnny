@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Services\JohnnyCliService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Process;
 
 class ProvisionBucketController extends Controller
 {
@@ -25,18 +24,12 @@ class ProvisionBucketController extends Controller
 
         $bucketName = $validated['bucket'] ?? $this->randomBucketName();
 
-        $createBucket = Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'create', $bucketName,
-        ]);
+        $createBucket = $this->johnny->createBucket($bucketName);
 
         if (! $createBucket->successful()) {
-            $err = trim($createBucket->errorOutput() ?: $createBucket->output());
-
             return response()->json([
                 'message' => 'Failed to create bucket.',
-                'detail' => $err !== '' ? $err : 'Unknown error from johnny bucket create.',
+                'detail' => $this->johnny->errorDetail($createBucket, 'Unknown error from johnny bucket create.'),
             ], 422);
         }
 
@@ -46,11 +39,7 @@ class ProvisionBucketController extends Controller
 
         for ($attempt = 0; $attempt < 8; $attempt++) {
             $keyName = $this->randomGarageKeyName($bucketName);
-            $keyResult = Process::run([
-                'sudo', '-u', 'johnny',
-                '/usr/local/bin/johnny',
-                'key', 'create', $keyName,
-            ]);
+            $keyResult = $this->johnny->createKey($keyName);
 
             $keyText = trim($keyResult->output()."\n".$keyResult->errorOutput());
             $parsed = $this->johnny->parseKeyCreateOutput($keyText);
@@ -69,11 +58,7 @@ class ProvisionBucketController extends Controller
             ], 500);
         }
 
-        $allowNew = Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'allow', '--read', '--write', '--owner', $bucketName, '--key', $keyName,
-        ]);
+        $allowNew = $this->johnny->allowKeyOnBucket($keyName, $bucketName);
 
         if (! $allowNew->successful()) {
             return response()->json([
@@ -88,14 +73,7 @@ class ProvisionBucketController extends Controller
             ], 500);
         }
 
-        $panelKeyName = config('services.garage.key_name', 'johnny-default');
-        Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'allow', '--read', '--write', '--owner', $bucketName, '--key', $panelKeyName,
-        ]);
-
-        $this->johnny->allowBackupKeyReadOnBucket($bucketName);
+        $this->johnny->ensureDefaultSystemKeysOnBucket($bucketName);
 
         $endpoint = config('services.garage.endpoint');
         $region = config('services.garage.region', 'johnny');

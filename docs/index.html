@@ -14,12 +14,12 @@
     content="S3-compatible object storage, automated SFTP backups, and an elegant web panel — in one install. Powered by Garage." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://johnny.web.ap.it/" />
-  <meta property="og:image" content="https://johnny.web.ap.it/img/light.jpg" />
+  <meta property="og:image" content="https://johnny.web.ap.it/img/dashboard.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Johnny — Self-hosted S3 Storage Platform" />
   <meta name="twitter:description"
     content="S3-compatible object storage, automated SFTP backups, and an elegant web panel — in one install." />
-  <meta name="twitter:image" content="https://johnny.web.ap.it/img/light.jpg" />
+  <meta name="twitter:image" content="https://johnny.web.ap.it/img/dashboard.jpg" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -624,11 +624,41 @@
       display: block;
     }
 
+    .browser-bar span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Fixed-height viewport: tall pages scroll inside the frame instead of resizing the section. */
+    .browser-viewport {
+      height: min(72vh, 720px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--surface);
+      scrollbar-width: thin;
+      scrollbar-color: #8b95a5 transparent;
+    }
+
     .browser-frame img {
       display: block;
       width: 100%;
       height: auto;
       background: var(--surface);
+    }
+
+    @media (max-width: 700px) {
+      .browser-viewport {
+        height: auto;
+        max-height: 70vh;
+      }
+    }
+
+    .panel-hint {
+      margin-top: 0.35rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
     }
 
     .panel-caption {
@@ -844,7 +874,8 @@
     "url": "https://johnny.web.ap.it",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux",
-    "softwareVersion": "1.0.5",
+    "softwareVersion": "1.1.0",
+    "screenshot": "https://johnny.web.ap.it/img/dashboard.jpg",
     "license": "https://github.com/andreapollastri/johnny/blob/main/LICENSE",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "author": { "@type": "Person", "name": "Andrea Pollastri", "url": "https://github.com/andreapollastri" },
@@ -944,7 +975,7 @@
         <div class="coverage-row">
           <span class="n">04</span>
           <span class="name">Web panel + 2FA</span>
-          <span class="desc">Optional Laravel dashboard for buckets, objects, and keys — TOTP and SMTP reset.</span>
+          <span class="desc">Dashboard, file browser with folders and multi-upload, per-bucket key permissions, TOTP 2FA.</span>
           <span class="tag">UI</span>
         </div>
         <div class="coverage-row">
@@ -958,6 +989,12 @@
           <span class="name">Self-updating</span>
           <span class="desc">Nightly cron pulls the latest release, runs migrations, and refreshes the panel.</span>
           <span class="tag">Ops</span>
+        </div>
+        <div class="coverage-row">
+          <span class="n">07</span>
+          <span class="name">Local demo</span>
+          <span class="desc">One script boots Garage, seeds ~1 GB of sample data, and serves the panel on your laptop.</span>
+          <span class="tag">Dev</span>
         </div>
       </div>
     </div>
@@ -1028,29 +1065,47 @@
       <div class="section-kicker">Web panel</div>
       <h2 class="section-title">A panel you'll actually use.</h2>
       <p class="section-lead">
-        Monitor storage, manage buckets and keys, issue API tokens — light or dark, secured with TOTP.
+        Monitor storage, browse and upload files, manage keys and permissions, issue API tokens —
+        light or dark, secured with TOTP.
       </p>
 
       <div class="panel-tabs" role="tablist" aria-label="Panel screenshots">
-        <button type="button" class="panel-tab active" data-shot="img/light.jpg"
-          data-caption="Dashboard — storage overview &amp; top buckets" role="tab"
-          aria-selected="true">Dashboard</button>
-        <button type="button" class="panel-tab" data-shot="img/dark.jpg" data-caption="Dashboard — built-in dark mode"
-          role="tab" aria-selected="false">Dark mode</button>
-        <button type="button" class="panel-tab" data-shot="img/buckets.jpg"
-          data-caption="Buckets — create, browse &amp; delete" role="tab" aria-selected="false">Buckets</button>
-        <button type="button" class="panel-tab" data-shot="img/settings.jpg"
-          data-caption="Settings — 2FA &amp; Sanctum API tokens" role="tab" aria-selected="false">Settings</button>
-        <button type="button" class="panel-tab" data-shot="img/api.jpg"
-          data-caption="Swagger UI — explore every endpoint" role="tab" aria-selected="false">API docs</button>
+        <button type="button" class="panel-tab active" role="tab" aria-selected="true"
+          data-shot="img/dashboard.jpg" data-path="/dashboard"
+          data-caption="Dashboard — buckets, objects, stored data and disk usage at a glance">Dashboard</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/dashboard-dark.jpg" data-path="/dashboard"
+          data-caption="Built-in dark mode, following your system or toggled from the header">Dark mode</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/buckets.jpg" data-path="/buckets"
+          data-caption="Buckets — create, filter and delete; the default bucket is protected">Buckets</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/objects.jpg" data-path="/buckets/website-assets"
+          data-caption="File browser — folders, multi-file upload, downloads and pagination">Files</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/permissions.jpg" data-path="/buckets/website-assets?tab=keys"
+          data-caption="Per-bucket permissions — grant read, write or owner to any access key">Permissions</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/keys.jpg" data-path="/keys"
+          data-caption="Access keys — new credentials are shown once, ready to copy">Keys</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/settings.jpg" data-path="/settings"
+          data-caption="Settings — TOTP two-factor authentication and Sanctum API tokens">Settings</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/api.jpg" data-path="/api/docs"
+          data-caption="Swagger UI for the REST API, with the OpenAPI spec at /api/openapi.yaml">API docs</button>
       </div>
 
       <div class="browser-frame">
-        <div class="browser-bar"><i></i><span>s3.your-site.test</span></div>
-        <img id="panelShot" src="img/light.jpg" alt="Johnny web panel — storage dashboard" width="1473" height="1325"
-          loading="lazy" />
+        <div class="browser-bar"><i></i><span id="panelUrl">panel.your-site.test/dashboard</span></div>
+        <div class="browser-viewport" id="panelViewport" tabindex="0" aria-label="Screenshot viewport">
+          <img id="panelShot" src="img/dashboard.jpg"
+            alt="Johnny web panel: dashboard with bucket, object, stored data and disk usage cards"
+            width="2560" height="1750" decoding="async" />
+        </div>
       </div>
-      <p class="panel-caption" id="panelCaption">Dashboard — storage overview &amp; top buckets</p>
+      <p class="panel-caption" id="panelCaption">Dashboard — buckets, objects, stored data and disk usage at a glance</p>
+      <p class="panel-hint">Real screenshots from the local demo (<code>bash demo/up.sh</code>): Garage 2.4, ~1 GB of sample data.</p>
     </div>
   </section>
 
@@ -1063,6 +1118,7 @@
           <li><a href="#doc-requirements">Requirements</a></li>
           <li><a href="#doc-install">Installation</a></li>
           <li><a href="#doc-panel">Web panel</a></li>
+          <li><a href="#doc-demo">Local demo</a></li>
           <li><a href="#doc-cli">CLI</a></li>
           <li><a href="#doc-backups">Backups</a></li>
           <li><a href="#doc-api">Panel API</a></li>
@@ -1110,7 +1166,8 @@
         <article class="doc-block" id="doc-install">
           <h3>Installation</h3>
           <p>
-            Prefer the autoinstaller. It installs dependencies, starts Garage, creates the
+            Prefer the autoinstaller. It installs dependencies, starts Garage (v2.4.1 by default, override with
+            <code>GARAGE_VERSION</code>), creates the
             <code>default</code> bucket and keys, configures Caddy TLS, writes
             <code>/etc/johnny/backup.json</code>, installs nightly cron, and can optionally install the panel.
           </p>
@@ -1145,8 +1202,10 @@
         <article class="doc-block" id="doc-panel">
           <h3>Web panel</h3>
           <p>
-            Optional Laravel dashboard for buckets, objects, and Garage API keys. If you skipped it
-            during autoinstall:
+            Optional Laravel panel: a storage dashboard, a file browser (folders, multi-file upload,
+            downloads, pagination), access keys with one-time credentials, per-bucket read / write /
+            owner permissions, TOTP two-factor authentication and API tokens. If you skipped it during
+            autoinstall:
           </p>
           <div class="code-block">
             <div class="code-header">
@@ -1183,6 +1242,31 @@
             </div>
             <pre><span class="tok-cmd">sudo -u www-data php</span> /opt/johnny/panel/artisan config:cache</pre>
           </div>
+        </article>
+
+        <article class="doc-block" id="doc-demo">
+          <h3>Local demo</h3>
+          <p>
+            Try the panel or work on it without a server. <code>demo/up.sh</code> starts a real single-node
+            Garage cluster, seeds eight buckets with about 1&nbsp;GB of sample objects, keys and permissions,
+            provisions a tenant through the REST API, and serves the panel on
+            <code>http://127.0.0.1:8099</code> (<code>demo@johnny.test</code> / <code>johnny-demo</code>).
+            Everything lives in <code>demo/.state/</code>.
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — macOS</span>
+              <button class="copy-btn" type="button"
+                data-copy="brew install garage&#10;bash demo/up.sh">Copy</button>
+            </div>
+            <pre><span class="tok-cmd">brew install</span> garage
+<span class="tok-cmd">bash</span> demo/up.sh
+<span class="tok-cmt"># later: bash demo/down.sh --wipe</span></pre>
+          </div>
+          <p style="margin-top:0.85rem">
+            The screenshots on this page come from that demo and are regenerated with
+            <code>node demo/screenshots.mjs</code>. Requirements: Garage 2.x, PHP 8.5, Composer and curl.
+          </p>
         </article>
 
         <article class="doc-block" id="doc-cli">
@@ -1449,7 +1533,40 @@
                 </tr>
                 <tr>
                   <td><code>panel/.env</code></td>
-                  <td>Laravel panel environment</td>
+                  <td>Laravel panel environment (see below)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h4>Panel environment</h4>
+          <div class="table-wrap">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>Variable</th>
+                  <th>Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GARAGE_ACCESS_KEY_ID</code> / <code>GARAGE_SECRET_ACCESS_KEY</code></td>
+                  <td>Panel S3 key (<code>johnny-default</code>), written by the installer</td>
+                </tr>
+                <tr>
+                  <td><code>GARAGE_ENDPOINT</code> / <code>GARAGE_DEFAULT_REGION</code></td>
+                  <td>Public S3 URL and region returned to API clients</td>
+                </tr>
+                <tr>
+                  <td><code>GARAGE_DATA_DIR</code></td>
+                  <td>Filesystem shown in the dashboard disk gauge (default <code>/var/lib/johnny/data</code>)</td>
+                </tr>
+                <tr>
+                  <td><code>JOHNNY_CLI_BINARY</code> / <code>JOHNNY_CLI_SUDO_USER</code></td>
+                  <td>How the panel calls the CLI (default <code>sudo -n -u johnny /usr/local/bin/johnny</code>)</td>
+                </tr>
+                <tr>
+                  <td><code>APP_TIMEZONE</code></td>
+                  <td>Timezone for dates in the panel (default <code>UTC</code>)</td>
                 </tr>
               </tbody>
             </table>
@@ -1458,7 +1575,7 @@
             Source and issues:
             <a class="link-inline" href="https://github.com/andreapollastri/johnny" target="_blank"
               rel="noopener">github.com/andreapollastri/johnny</a>
-            · MIT License · v1.0.5
+            · MIT License · v1.1.0
           </p>
         </article>
       </div>
@@ -1468,7 +1585,7 @@
   <footer>
     <div>
       &copy; 2026 <a href="https://andreapollastri.net" target="_blank" rel="noopener" style="margin-left:0">Andrea
-        Pollastri</a> — MIT License · v1.0.5
+        Pollastri</a> — MIT License · v1.1.0
     </div>
     <div>
       <a href="https://github.com/andreapollastri/johnny" target="_blank" rel="noopener">GitHub</a>
@@ -1500,6 +1617,8 @@
 
     const shot = document.getElementById("panelShot");
     const caption = document.getElementById("panelCaption");
+    const panelUrl = document.getElementById("panelUrl");
+    const viewport = document.getElementById("panelViewport");
     document.querySelectorAll(".panel-tab").forEach((tab) => {
       tab.addEventListener("click", () => {
         document.querySelectorAll(".panel-tab").forEach((t) => {
@@ -1508,10 +1627,27 @@
         });
         tab.classList.add("active");
         tab.setAttribute("aria-selected", "true");
-        if (shot) shot.src = tab.getAttribute("data-shot") || "";
-        if (caption) caption.innerHTML = tab.getAttribute("data-caption") || "";
+        if (shot) {
+          shot.src = tab.getAttribute("data-shot") || "";
+          shot.alt = "Johnny web panel: " + (tab.getAttribute("data-caption") || "");
+        }
+        if (caption) caption.textContent = tab.getAttribute("data-caption") || "";
+        if (panelUrl) panelUrl.textContent = "panel.your-site.test" + (tab.getAttribute("data-path") || "");
+        if (viewport) viewport.scrollTop = 0;
       });
     });
+
+    const warmShots = () => document.querySelectorAll(".panel-tab").forEach((tab) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = tab.getAttribute("data-shot");
+    });
+    if ("IntersectionObserver" in window && viewport) {
+      const warm = new IntersectionObserver((entries) => {
+        if (entries.some((e) => e.isIntersecting)) { warmShots(); warm.disconnect(); }
+      }, { rootMargin: "400px" });
+      warm.observe(viewport);
+    }
 
     const tocLinks = [...document.querySelectorAll(".docs-toc a")];
     const sections = tocLinks

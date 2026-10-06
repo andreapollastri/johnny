@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use Aws\Result;
 use Aws\S3\S3Client;
+
 class GarageS3
 {
     private ?S3Client $client = null;
@@ -66,15 +68,23 @@ class GarageS3
     }
 
     /**
-     * @return array{folders: list<string>, files: list<array{key: string, size: int, last_modified: ?string}>}
+     * One page of a "directory" listing (folders are S3 common prefixes).
+     *
+     * @return array{folders: list<string>, files: list<array{key: string, size: int, last_modified: ?string}>, next_token: ?string}
      */
-    public function listObjects(string $bucket, string $prefix = ''): array
+    public function listObjects(string $bucket, string $prefix = '', ?string $continuationToken = null, int $maxKeys = 1000): array
     {
-        $res = $this->client()->listObjectsV2([
+        $params = [
             'Bucket' => $bucket,
             'Prefix' => $prefix,
             'Delimiter' => '/',
-        ]);
+            'MaxKeys' => $maxKeys,
+        ];
+        if ($continuationToken) {
+            $params['ContinuationToken'] = $continuationToken;
+        }
+
+        $res = $this->client()->listObjectsV2($params);
 
         $folders = [];
         foreach ($res['CommonPrefixes'] ?? [] as $cp) {
@@ -93,7 +103,11 @@ class GarageS3
             ];
         }
 
-        return ['folders' => $folders, 'files' => $files];
+        return [
+            'folders' => $folders,
+            'files' => $files,
+            'next_token' => ! empty($res['IsTruncated']) ? ($res['NextContinuationToken'] ?? null) : null,
+        ];
     }
 
     /**
@@ -140,14 +154,23 @@ class GarageS3
         $this->client()->putObject($params);
     }
 
-    public function getObjectStream(string $bucket, string $key)
+    /**
+     * Zero-byte "folder/" marker so an empty folder shows up in listings.
+     */
+    public function createFolder(string $bucket, string $prefix): void
     {
-        $res = $this->client()->getObject([
+        $this->putObject($bucket, rtrim($prefix, '/').'/', '');
+    }
+
+    /**
+     * GetObject result: Body (stream), ContentType, ContentLength, …
+     */
+    public function getObject(string $bucket, string $key): Result
+    {
+        return $this->client()->getObject([
             'Bucket' => $bucket,
             'Key' => $key,
         ]);
-
-        return $res['Body'];
     }
 
     public function deleteObject(string $bucket, string $key): void

@@ -4,7 +4,11 @@
 
 Johnny wraps [Garage](https://garagehq.deuxfleurs.fr/) with production-ready automation: TLS via Caddy, nightly SFTP backups with retention, a `johnny` CLI, and an optional Laravel web panel with two-factor authentication.
 
-> **Current release:** see [`VERSION`](VERSION) &middot; **License:** [MIT](LICENSE)
+> **Current release:** see [`VERSION`](VERSION) &middot; **License:** [MIT](LICENSE) &middot; **Website:** [johnny.web.ap.it](https://johnny.web.ap.it)
+
+![Johnny web panel — storage dashboard](docs/img/dashboard.jpg)
+
+<sub>All screenshots are taken from the [local demo](#local-demo): a real Garage 2.4 node with ~1 GB of sample data.</sub>
 
 ---
 
@@ -15,10 +19,11 @@ Johnny wraps [Garage](https://garagehq.deuxfleurs.fr/) with production-ready aut
 | **S3-compatible storage** | Powered by Garage — use any AWS SDK, `aws` CLI, or S3 client |
 | **One-command install** | Single script sets up Garage, Caddy (Let's Encrypt TLS), rclone, cron |
 | **Automated SFTP backups** | Nightly sync of every bucket to one or more remote servers, with configurable retention |
-| **Web panel** | Laravel-based dashboard for buckets, objects, and API keys (optional) |
+| **Web panel** | Storage dashboard, file browser (folders, multi-upload, pagination), access keys and per-bucket permissions (optional) |
 | **Provisioning API** | Authenticated HTTP endpoint to create a bucket, a dedicated Garage key, and return S3 connection details (optional panel) |
 | **Two-factor auth** | TOTP 2FA + password reset via SMTP on the web panel |
 | **Self-updating** | Nightly cron pulls the latest release, runs migrations, and refreshes the panel |
+| **Local demo** | `bash demo/up.sh` boots Garage, seeds sample data and serves the panel on your laptop |
 
 ---
 
@@ -68,7 +73,7 @@ sudo bash scripts/autoinstall.sh
 
 The interactive wizard will:
 
-1. Install dependencies (Python 3, Caddy, rclone, …) and run `scripts/install.sh`
+1. Install dependencies (Python 3, Caddy, rclone, …) and run `scripts/install.sh` (Garage v2.4.1 by default; override with `GARAGE_VERSION=vX.Y.Z`)
 2. Start Garage and bootstrap a single-node layout
 3. Create bucket `default`, API keys `johnny-default` (apps) and `johnny-backup` (nightly sync), and write env files under `/etc/johnny/credentials/`
 4. Configure **Caddy** with automatic TLS for your S3 domain
@@ -101,6 +106,15 @@ Then configure TLS yourself — see `config/caddy-johnny.caddy.example` or `conf
 
 The optional Laravel panel provides a browser-based interface to manage **buckets**, **objects**, and **Garage API keys**.
 
+| | |
+|---|---|
+| ![Buckets](docs/img/buckets.jpg) | ![File browser](docs/img/objects.jpg) |
+| **Buckets** — create, filter, delete (the `default` bucket is protected) | **File browser** — folders, multi-file upload, downloads, pagination |
+| ![Bucket permissions](docs/img/permissions.jpg) | ![Access keys](docs/img/keys.jpg) |
+| **Permissions** — grant read / write / owner per bucket | **Access keys** — new credentials are shown once, ready to copy |
+| ![Settings](docs/img/settings.jpg) | ![Dark mode](docs/img/dashboard-dark.jpg) |
+| **Settings** — TOTP 2FA and Sanctum API tokens | **Dark mode** — follows the system or the header toggle |
+
 ### Install the Panel
 
 If you chose to skip the panel during autoinstall, you can add it later:
@@ -112,6 +126,22 @@ sudo bash scripts/install-panel.sh /opt/johnny https://panel.example.com
 The script installs PHP 8.5-FPM, Composer, runs Laravel migrations and caches, and wires the Garage credentials from `/etc/johnny/credentials/default-s3.env` into `panel/.env`.
 
 See `config/caddy-panel.caddy.example` for the Caddy vhost configuration.
+
+### Panel Environment
+
+Besides the Laravel defaults, `panel/.env` supports:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GARAGE_ACCESS_KEY_ID` / `GARAGE_SECRET_ACCESS_KEY` | from `default-s3.env` | S3 key used by the panel (`johnny-default`) |
+| `GARAGE_ENDPOINT` / `GARAGE_DEFAULT_REGION` | from `default-s3.env` / `johnny` | Public S3 URL and region (also returned by the provisioning API) |
+| `GARAGE_KEY_NAME` | `johnny-default` | Key granted on every bucket created from the panel or API |
+| `GARAGE_DATA_DIR` | `/var/lib/johnny/data` | Filesystem shown in the dashboard disk gauge |
+| `JOHNNY_CLI_BINARY` | `/usr/local/bin/johnny` | CLI used for buckets, keys and permissions |
+| `JOHNNY_CLI_SUDO_USER` | `johnny` | Run the CLI as this user via `sudo -n`; empty to call it directly |
+| `APP_TIMEZONE` | `UTC` | Timezone for dates shown in the panel |
+
+Dashboard statistics require listing every object, so they are cached for 60 seconds; use **Refresh** on the dashboard to recompute them.
 
 ### Create an Admin User
 
@@ -147,6 +177,8 @@ Accept: application/json
 ```
 
 **Interactive docs (no token required):** open `GET /api/docs` in a browser for Swagger UI. The machine-readable OpenAPI 3 spec is at `GET /api/openapi.yaml`.
+
+![Swagger UI for the panel API](docs/img/api.jpg)
 
 **Endpoint:** `POST /api/buckets/provision`  
 Use your panel base URL, for example `https://panel.example.com/api/buckets/provision`.
@@ -199,12 +231,40 @@ Same **Sanctum** authentication as provisioning (`Authorization: Bearer …`, `A
 | `DELETE` | `/api/buckets/{bucket}` | Delete an empty bucket (the `default` bucket is protected). |
 | `GET` | `/api/keys` | List Garage keys (system keys `johnny-default` / `johnny-backup` are omitted, as in the UI). |
 | `POST` | `/api/keys` | Create a key. Body: `{"name":"my-key"}`. Response includes `id`, `credentials`, and optional `raw_output`. |
-| `GET` | `/api/keys/{keyId}` | Lookup one key by id (`GK…`). System keys return **403**. |
+| `GET` | `/api/keys/{keyId}` | Lookup one key by id (`GK…`, exact match — id prefixes return **404**). System keys return **403**. |
 | `DELETE` | `/api/keys/{keyId}` | Delete a key (system keys **403**). |
 | `POST` | `/api/buckets/{bucket}/keys` | Grant permissions. Body: `{"key_id":"GK…","read":true,"write":false,"owner":false}` (at least one of `read` / `write` / `owner` must be true). |
-| `DELETE` | `/api/buckets/{bucket}/keys/{keyId}` | Revoke permissions. Send the same boolean flags as the panel revoke form (query string or JSON body; at least one true). |
+| `DELETE` | `/api/buckets/{bucket}/keys/{keyId}` | Revoke permissions. Send the same boolean flags as the panel revoke form (query string or JSON body; at least one true). System keys return **403**. |
 
 Garage does not support renaming buckets or keys; there are no `PUT`/`PATCH` routes for those resources.
+
+---
+
+## Local Demo
+
+Run the whole stack on your laptop — useful for evaluating Johnny, developing the panel, or regenerating the screenshots above. Nothing is installed system-wide; all state lives in `demo/.state/`.
+
+```bash
+brew install garage        # or put a Garage 2.x binary in PATH / set GARAGE_BIN
+bash demo/up.sh            # Garage + ~1 GB of sample data + panel on http://127.0.0.1:8099
+bash demo/down.sh --wipe   # stop and delete the demo data
+```
+
+Sign in with `demo@johnny.test` / `johnny-demo`. The seed creates eight buckets, seven application keys with different permissions, three API tokens, and provisions `tenant-acme` through the real REST API. Regenerate the documentation screenshots with `npm --prefix demo install && node demo/screenshots.mjs`. Details: [`demo/README.md`](demo/README.md).
+
+---
+
+## Development
+
+```bash
+cd panel
+composer install
+composer test              # PHPUnit: CLI parsers (real Garage 2.4 output), web UI, API, security guards
+vendor/bin/pint            # code style
+cd .. && python3 -m unittest discover -s scripts/tests
+```
+
+GitHub Actions runs the panel tests, Pint, `composer audit`, the Python tests and ShellCheck on every push and pull request.
 
 ---
 
@@ -363,7 +423,7 @@ sudo bash scripts/replicate-run.sh config/replication/media-to-eu.env
 | `/etc/johnny/repo.path` | Path to the Johnny repo (for updates) |
 | `/etc/johnny/migrations.state` | Last applied migration number |
 | `/etc/cron.d/johnny-nightly` | Cron schedule |
-| `panel/.env` | Laravel panel environment |
+| `panel/.env` | Laravel panel environment (see [Panel Environment](#panel-environment)) |
 
 Example configs are in the `config/` directory of this repository.
 

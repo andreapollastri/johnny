@@ -4,7 +4,7 @@
 # For interactive TLS + default keys + cron, use: sudo bash scripts/autoinstall.sh
 set -euo pipefail
 
-GARAGE_VERSION="${GARAGE_VERSION:-v2.2.0}"
+GARAGE_VERSION="${GARAGE_VERSION:-v2.4.1}"
 INSTALL_PREFIX="${INSTALL_PREFIX:-/usr/local}"
 CONFIG_DIR="/etc/johnny"
 STATE_ROOT="/var/lib/johnny"

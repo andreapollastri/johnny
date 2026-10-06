@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "name": "johnny-demo-screenshots",
+  "description": "Captures the docs screenshots from the local demo (see demo/README.md).",
+  "type": "module",
+  "scripts": {
+    "screenshots": "node screenshots.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

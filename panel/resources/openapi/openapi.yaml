@@ -7,7 +7,7 @@ info:
     Create tokens in the panel under **Settings → Panel API tokens**, or with `php artisan johnny:api-token user@example.com`.
 
     Send `Authorization: Bearer <token>` and `Accept: application/json` on every request.
-  version: 1.0.0
+  version: 1.1.0
 
 servers:
   - url: /
@@ -67,6 +67,12 @@ components:
           example: GK00112233445566778899aabbccddeeff
         name:
           type: string
+        created:
+          type: string
+          format: date
+          nullable: true
+          description: Creation date reported by Garage 2.x (null on older releases)
+          example: '2026-10-07'
 
     KeyCreateRequest:
       type: object
@@ -471,6 +477,12 @@ paths:
                     type: boolean
                   owner:
                     type: boolean
+        '404':
+          description: No key with exactly this id (id prefixes are not accepted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
         '422':
           description: Validation or johnny error
           content:
@@ -507,6 +519,12 @@ paths:
       responses:
         '204':
           description: No content
+        '403':
+          description: System keys (johnny-default, johnny-backup) cannot be revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
         '404':
           description: Key id not found
           content:

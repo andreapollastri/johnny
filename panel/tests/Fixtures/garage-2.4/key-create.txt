@@ -1,0 +1,12 @@
+==== ACCESS KEY INFORMATION ====
+Key ID:              GK9e3b8d1f2a4c6e8b0d2f4a6c
+Key name:            mobile-app
+Secret key:          3f1c9a7e5b2d8f4a6c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d0f1a3c5e7b9d2f4a
+Created:             2026-10-07 00:37:27.120 +02:00
+Validity:            valid
+Expiration:          never
+
+Can create buckets:  false
+
+==== BUCKETS FOR THIS KEY ====
+Permissions  ID  Global aliases  Local aliases

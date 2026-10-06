@@ -42,13 +42,11 @@ class BucketApiController extends Controller
 
         $name = $validated['name'];
 
-        $result = $this->johnny->runJohnnyResult(['bucket', 'create', $name]);
+        $result = $this->johnny->createBucket($name);
         if (! $result->successful()) {
-            $detail = trim($result->errorOutput() ?: $result->output());
-
             return response()->json([
                 'message' => 'Failed to create bucket.',
-                'detail' => $detail !== '' ? $detail : 'Unknown error from johnny bucket create.',
+                'detail' => $this->johnny->errorDetail($result, 'Unknown error from johnny bucket create.'),
             ], 422);
         }
 
@@ -104,13 +102,11 @@ class BucketApiController extends Controller
             ], 403);
         }
 
-        $result = $this->johnny->runJohnnyResult(['bucket', 'delete', '--yes', $bucket]);
+        $result = $this->johnny->deleteBucket($bucket);
         if (! $result->successful()) {
-            $detail = trim($result->errorOutput() ?: $result->output());
-
             return response()->json([
                 'message' => 'Failed to delete bucket.',
-                'detail' => $detail !== '' ? $detail : 'Unknown error from johnny bucket delete.',
+                'detail' => $this->johnny->errorDetail($result, 'Unknown error from johnny bucket delete.'),
             ], 422);
         }
 

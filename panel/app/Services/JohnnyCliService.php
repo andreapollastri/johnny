@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Illuminate\Process\ProcessResult;
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
 
 class JohnnyCliService
@@ -14,6 +14,22 @@ class JohnnyCliService
 
     public const PROTECTED_BUCKETS = ['default'];
 
+    /**
+     * Full argv for a johnny CLI call: `sudo -n -u johnny /usr/local/bin/johnny …` by default.
+     *
+     * @param  list<string>  $args
+     * @return list<string>
+     */
+    public function command(array $args): array
+    {
+        $binary = (string) config('services.johnny.binary', '/usr/local/bin/johnny');
+        $sudoUser = (string) config('services.johnny.sudo_user', 'johnny');
+
+        $prefix = $sudoUser !== '' ? ['sudo', '-n', '-u', $sudoUser] : [];
+
+        return [...$prefix, $binary, ...$args];
+    }
+
     public function runJohnny(array $args): ?string
     {
         $r = $this->runJohnnyResult($args);
@@ -23,21 +39,57 @@ class JohnnyCliService
 
     public function runJohnnyResult(array $args): ProcessResult
     {
-        return Process::run(array_merge(['sudo', '-u', 'johnny', '/usr/local/bin/johnny'], $args));
+        return Process::run($this->command($args));
     }
 
     /**
-     * @return list<array{id: string, name: string}>
+     * Human-readable failure detail from a CLI result (stderr first, then stdout).
+     */
+    public function errorDetail(ProcessResult $result, string $fallback): string
+    {
+        $detail = trim($result->errorOutput() ?: $result->output());
+
+        return $detail !== '' ? $detail : $fallback;
+    }
+
+    public function createBucket(string $bucket): ProcessResult
+    {
+        return $this->runJohnnyResult(['bucket', 'create', $bucket]);
+    }
+
+    public function deleteBucket(string $bucket): ProcessResult
+    {
+        return $this->runJohnnyResult(['bucket', 'delete', '--yes', $bucket]);
+    }
+
+    public function createKey(string $name): ProcessResult
+    {
+        return $this->runJohnnyResult(['key', 'create', $name]);
+    }
+
+    /**
+     * Callers must pass a canonical key id (see resolveCanonicalKeyId): Garage also accepts
+     * id prefixes, which would otherwise slip past the system-key guard.
+     */
+    public function deleteKey(string $keyId): ProcessResult
+    {
+        return $this->runJohnnyResult(['key', 'delete', '--yes', $keyId]);
+    }
+
+    /**
+     * Parse `garage key list`: "ID  Created  Name  Expiration" (2.x) or "ID  Name" (older).
+     *
+     * @return list<array{id: string, name: string, created: ?string}>
      */
     public function parseKeyList(string $output): array
     {
         $keys = [];
         foreach (explode("\n", $output) as $line) {
             $line = trim($line);
-            if (preg_match('/^(GK[0-9a-f]+)\s+\d{4}-\d{2}-\d{2}\s+(\S+)/i', $line, $m)) {
-                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
+            if (preg_match('/^(GK[0-9a-f]+)\s+(\d{4}-\d{2}-\d{2})\s+(\S+)/i', $line, $m)) {
+                $keys[] = ['id' => $m[1], 'name' => $m[3], 'created' => $m[2]];
             } elseif (preg_match('/^(GK[0-9a-f]+)\s+(\S+)/i', $line, $m)) {
-                $keys[] = ['id' => trim($m[1]), 'name' => trim($m[2])];
+                $keys[] = ['id' => $m[1], 'name' => $m[2], 'created' => null];
             }
         }
 
@@ -45,13 +97,29 @@ class JohnnyCliService
     }
 
     /**
-     * @return list<array{id: string, name: string}>
+     * @return list<array{id: string, name: string, created: ?string}>
      */
     public function listAllKeys(): array
     {
         $out = $this->runJohnny(['key', 'list']);
 
         return $this->parseKeyList($out ?? '');
+    }
+
+    /**
+     * Keys created by users (system keys hidden), sorted by name.
+     *
+     * @return list<array{id: string, name: string, created: ?string}>
+     */
+    public function userKeys(array $keys): array
+    {
+        $keys = array_values(array_filter(
+            $keys,
+            fn ($k) => ! in_array($k['name'], self::SYSTEM_KEY_NAMES, true),
+        ));
+        usort($keys, fn ($a, $b) => strnatcasecmp($a['name'], $b['name']) ?: strcmp($a['id'], $b['id']));
+
+        return $keys;
     }
 
     /**
@@ -83,37 +151,41 @@ class JohnnyCliService
      */
     public function parseBucketInfo(string $bucket): array
     {
-        $result = $this->runJohnnyResult([
-            'bucket', 'info', $bucket,
-        ]);
-
+        $result = $this->runJohnnyResult(['bucket', 'info', $bucket]);
         $raw = $result->successful() ? $result->output() : '';
+
+        return [$this->parseBucketInfoKeys($raw), $raw];
+    }
+
+    /**
+     * Rows of the "KEYS FOR THIS BUCKET" table: "RWO  GK…  key-name".
+     *
+     * @return list<array{id: string, name: string, permissions: string}>
+     */
+    public function parseBucketInfoKeys(string $raw): array
+    {
         $keys = [];
 
         foreach (explode("\n", $raw) as $line) {
-            $trimmed = trim($line);
-            if (preg_match('/^([RWO]+)\s+(GK[0-9a-f]+)\s*(.*)$/i', $trimmed, $m)) {
-                $perms = str_split(strtoupper(trim($m[1])));
-                $readable = [];
-                if (in_array('R', $perms)) {
-                    $readable[] = 'read';
-                }
-                if (in_array('W', $perms)) {
-                    $readable[] = 'write';
-                }
-                if (in_array('O', $perms)) {
-                    $readable[] = 'owner';
-                }
-
-                $keys[] = [
-                    'id' => trim($m[2]),
-                    'name' => trim($m[3]),
-                    'permissions' => implode(', ', $readable),
-                ];
+            if (! preg_match('/^([RWO]+)\s+(GK[0-9a-f]+)\s*(.*)$/i', trim($line), $m)) {
+                continue;
             }
+
+            $perms = str_split(strtoupper($m[1]));
+            $readable = array_values(array_filter([
+                in_array('R', $perms, true) ? 'read' : null,
+                in_array('W', $perms, true) ? 'write' : null,
+                in_array('O', $perms, true) ? 'owner' : null,
+            ]));
+
+            $keys[] = [
+                'id' => $m[2],
+                'name' => trim($m[3]),
+                'permissions' => implode(', ', $readable),
+            ];
         }
 
-        return [$keys, $raw];
+        return $keys;
     }
 
     public function resolveCanonicalKeyId(string $keyId): ?string
@@ -143,25 +215,17 @@ class JohnnyCliService
         return false;
     }
 
-    public function allowKeyOnBucket(string $keyName, string $bucket): void
+    public function allowKeyOnBucket(string $keyName, string $bucket): ProcessResult
     {
-        Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'allow', '--read', '--write', '--owner', $bucket, '--key', $keyName,
-        ]);
+        return $this->bucketAllow($bucket, $keyName, true, true, true);
     }
 
     /**
      * Read-only access for the internal backup key (nightly rclone sync).
      */
-    public function allowBackupKeyReadOnBucket(string $bucket): void
+    public function allowBackupKeyReadOnBucket(string $bucket): ProcessResult
     {
-        Process::run([
-            'sudo', '-u', 'johnny',
-            '/usr/local/bin/johnny',
-            'bucket', 'allow', '--read', $bucket, '--key', self::BACKUP_KEY_NAME,
-        ]);
+        return $this->bucketAllow($bucket, self::BACKUP_KEY_NAME, true, false, false);
     }
 
     /**
@@ -284,39 +348,26 @@ class JohnnyCliService
 
     public function bucketAllow(string $bucket, string $keyId, bool $read, bool $write, bool $owner): ProcessResult
     {
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'allow'];
-        if ($read) {
-            $cmd[] = '--read';
-        }
-        if ($write) {
-            $cmd[] = '--write';
-        }
-        if ($owner) {
-            $cmd[] = '--owner';
-        }
-        $cmd[] = $bucket;
-        $cmd[] = '--key';
-        $cmd[] = $keyId;
-
-        return Process::run($cmd);
+        return $this->runJohnnyResult($this->permissionArgs('allow', $bucket, $keyId, $read, $write, $owner));
     }
 
     public function bucketDeny(string $bucket, string $keyId, bool $read, bool $write, bool $owner): ProcessResult
     {
-        $cmd = ['sudo', '-u', 'johnny', '/usr/local/bin/johnny', 'bucket', 'deny'];
-        if ($read) {
-            $cmd[] = '--read';
-        }
-        if ($write) {
-            $cmd[] = '--write';
-        }
-        if ($owner) {
-            $cmd[] = '--owner';
-        }
-        $cmd[] = $bucket;
-        $cmd[] = '--key';
-        $cmd[] = $keyId;
+        return $this->runJohnnyResult($this->permissionArgs('deny', $bucket, $keyId, $read, $write, $owner));
+    }
 
-        return Process::run($cmd);
+    /**
+     * @return list<string>
+     */
+    private function permissionArgs(string $verb, string $bucket, string $keyId, bool $read, bool $write, bool $owner): array
+    {
+        return [
+            'bucket', $verb,
+            ...($read ? ['--read'] : []),
+            ...($write ? ['--write'] : []),
+            ...($owner ? ['--owner'] : []),
+            $bucket,
+            '--key', $keyId,
+        ];
     }
 }

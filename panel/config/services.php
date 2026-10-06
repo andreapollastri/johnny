@@ -41,6 +41,15 @@ return [
         'region' => env('GARAGE_DEFAULT_REGION', 'johnny'),
         'endpoint' => env('GARAGE_ENDPOINT'),
         'key_name' => env('GARAGE_KEY_NAME', 'johnny-default'),
+        // Filesystem holding Garage data blocks; used for the dashboard disk gauge.
+        'data_dir' => env('GARAGE_DATA_DIR', '/var/lib/johnny/data'),
+    ],
+
+    'johnny' => [
+        // The panel shells out to the johnny CLI (Garage passthrough) as the "johnny" system user.
+        // Leave JOHNNY_CLI_SUDO_USER empty to call the binary directly (local demo, containers).
+        'binary' => env('JOHNNY_CLI_BINARY', '/usr/local/bin/johnny'),
+        'sudo_user' => env('JOHNNY_CLI_SUDO_USER', 'johnny'),
     ],
 
 ];

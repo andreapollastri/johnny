@@ -32,26 +32,29 @@ class BucketKeyApiController extends Controller
             ], 422);
         }
 
+        $canonical = $this->johnny->resolveCanonicalKeyId($validated['key_id']);
+        if ($canonical === null) {
+            return response()->json(['message' => 'Key not found.'], 404);
+        }
+
         $result = $this->johnny->bucketAllow(
             $bucket,
-            $validated['key_id'],
+            $canonical,
             $request->boolean('read'),
             $request->boolean('write'),
             $request->boolean('owner'),
         );
 
         if (! $result->successful()) {
-            $detail = trim($result->errorOutput() ?: $result->output());
-
             return response()->json([
                 'message' => 'Failed to grant permissions.',
-                'detail' => $detail !== '' ? $detail : 'Unknown error from johnny bucket allow.',
+                'detail' => $this->johnny->errorDetail($result, 'Unknown error from johnny bucket allow.'),
             ], 422);
         }
 
         return response()->json([
             'bucket' => $bucket,
-            'key_id' => $validated['key_id'],
+            'key_id' => $canonical,
             'read' => $request->boolean('read'),
             'write' => $request->boolean('write'),
             'owner' => $request->boolean('owner'),
@@ -80,6 +83,10 @@ class BucketKeyApiController extends Controller
             return response()->json(['message' => 'Key not found.'], 404);
         }
 
+        if ($this->johnny->isSystemKey($canonical)) {
+            return response()->json(['message' => 'System key permissions are managed by Johnny and cannot be revoked.'], 403);
+        }
+
         $result = $this->johnny->bucketDeny(
             $bucket,
             $canonical,
@@ -89,11 +96,9 @@ class BucketKeyApiController extends Controller
         );
 
         if (! $result->successful()) {
-            $detail = trim($result->errorOutput() ?: $result->output());
-
             return response()->json([
                 'message' => 'Failed to revoke permissions.',
-                'detail' => $detail !== '' ? $detail : 'Unknown error from johnny bucket deny.',
+                'detail' => $this->johnny->errorDetail($result, 'Unknown error from johnny bucket deny.'),
             ], 422);
         }
 

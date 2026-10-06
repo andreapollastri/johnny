@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  panel:
+    name: Panel (PHP 8.5)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: panel
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, pdo_sqlite, sqlite3, intl, bcmath
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Code style (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Tests
+        run: php artisan test
+
+      - name: Security audit
+        run: composer audit
+
+  scripts:
+    name: Scripts (Python + shell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Python syntax
+        run: python -m py_compile scripts/*.py
+
+      - name: Python tests
+        run: python -m unittest discover -s scripts/tests -v
+
+      - name: ShellCheck
+        run: shellcheck -x --severity=warning scripts/*.sh scripts/lib/*.sh scripts/migrations/*.sh demo/*.sh

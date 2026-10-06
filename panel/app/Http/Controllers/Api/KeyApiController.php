@@ -24,12 +24,7 @@ class KeyApiController extends Controller
             ], 503);
         }
 
-        $keys = collect($this->johnny->parseKeyList($output))
-            ->reject(fn ($k) => in_array($k['name'], JohnnyCliService::SYSTEM_KEY_NAMES, true))
-            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
-            ->values();
-
-        return response()->json(['data' => $keys]);
+        return response()->json(['data' => $this->johnny->userKeys($this->johnny->parseKeyList($output))]);
     }
 
     public function store(Request $request): JsonResponse
@@ -44,7 +39,7 @@ class KeyApiController extends Controller
             ], 422);
         }
 
-        $result = $this->johnny->runJohnnyResult(['key', 'create', $validated['name']]);
+        $result = $this->johnny->createKey($validated['name']);
         $combined = trim($result->output()."\n".$result->errorOutput());
 
         if (! $result->successful()) {
@@ -107,13 +102,11 @@ class KeyApiController extends Controller
             return response()->json(['message' => 'System keys cannot be deleted.'], 403);
         }
 
-        $result = $this->johnny->runJohnnyResult(['key', 'delete', '--yes', $canonical]);
+        $result = $this->johnny->deleteKey($canonical);
         if (! $result->successful()) {
-            $detail = trim($result->errorOutput() ?: $result->output());
-
             return response()->json([
                 'message' => 'Failed to delete key.',
-                'detail' => $detail !== '' ? $detail : 'Unknown error from johnny key delete.',
+                'detail' => $this->johnny->errorDetail($result, 'Unknown error from johnny key delete.'),
             ], 422);
         }
 

@@ -21,3 +21,8 @@ panel/public/build
 panel/public/hot
 panel/.env
 panel/.phpunit.result.cache
+
+# Local demo (demo/up.sh)
+demo/.state/
+demo/node_modules/
+panel/.env.demo

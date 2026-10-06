@@ -7,8 +7,8 @@ ENV_FILE="${1:?Usage: $0 /path/to/envfile}"
 
 [[ -f "$ENV_FILE" ]] || { echo "Env file not found: $ENV_FILE" >&2; exit 1; }
 
-# shellcheck source=/dev/null
 set -a
+# shellcheck source=/dev/null
 source "$ENV_FILE"
 set +a
 

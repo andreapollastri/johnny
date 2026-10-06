@@ -1,16 +1,23 @@
 @extends('layouts.app')
 
+@use('App\Support\Format')
+
 @section('title', $bucket.' — '.config('app.name'))
 
 @section('content')
 <div class="page-header">
-    <h1>{{ $bucket }}</h1>
-    <p class="subtitle"><a href="{{ route('buckets.index') }}">&larr; All buckets</a></p>
+    <p class="crumb"><a href="{{ route('buckets.index') }}">&larr; All buckets</a></p>
+    <h1 class="title-with-badge">
+        {{ $bucket }}
+        @if ($isProtected)
+            <span class="badge badge-muted">protected</span>
+        @endif
+    </h1>
 </div>
 
 <div class="tabs">
     <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects']) }}" @class(['active' => $tab === 'objects'])>Objects</a>
-    <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'keys']) }}" @class(['active' => $tab === 'keys'])>Keys</a>
+    <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'keys']) }}" @class(['active' => $tab === 'keys'])>Access keys</a>
 </div>
 
 @if (session('status'))
@@ -27,107 +34,107 @@
         <div class="errors">{{ $objectsError }}</div>
     @else
         @php
-            $formatSize = function ($bytes) {
-                if ($bytes === 0) return '0 B';
-                $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-                $i = (int) floor(log($bytes, 1024));
-                $i = min($i, count($units) - 1);
-                $value = $bytes / pow(1024, $i);
-                return ($i === 0 ? (int) $value : number_format($value, 2)) . ' ' . $units[$i];
-            };
-
             $breadcrumbs = [];
-            if ($prefix) {
-                $parts = array_filter(explode('/', $prefix));
-                $cumulative = '';
-                foreach ($parts as $part) {
-                    $cumulative .= $part . '/';
-                    $breadcrumbs[] = ['name' => $part, 'prefix' => $cumulative];
-                }
+            $cumulative = '';
+            foreach (array_filter(explode('/', $prefix), 'strlen') as $part) {
+                $cumulative .= $part.'/';
+                $breadcrumbs[] = ['name' => $part, 'prefix' => $cumulative];
             }
-
-            $parentPrefix = '';
-            if (count($breadcrumbs) >= 2) {
-                $parentPrefix = $breadcrumbs[count($breadcrumbs) - 2]['prefix'];
-            }
+            $parentPrefix = count($breadcrumbs) >= 2 ? $breadcrumbs[count($breadcrumbs) - 2]['prefix'] : '';
+            $folderUrl = fn (string $p) => route('buckets.show', array_filter(['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $p]));
         @endphp
 
         <div class="card">
             <div class="fm-breadcrumb">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects']) }}" @class(['active' => !$prefix])>/</a>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                @if (count($breadcrumbs) === 0)
+                    <span class="active">{{ $bucket }}</span>
+                @else
+                    <a href="{{ $folderUrl('') }}">{{ $bucket }}</a>
+                @endif
                 @foreach ($breadcrumbs as $bc)
-                    <span class="fm-breadcrumb-sep">&rsaquo;</span>
+                    <span class="fm-breadcrumb-sep">/</span>
                     @if ($loop->last)
                         <span class="active">{{ $bc['name'] }}</span>
                     @else
-                        <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $bc['prefix']]) }}">{{ $bc['name'] }}</a>
+                        <a href="{{ $folderUrl($bc['prefix']) }}">{{ $bc['name'] }}</a>
                     @endif
                 @endforeach
+            </div>
+
+            <div class="fm-toolbar">
+                <form method="POST" action="{{ route('objects.store', $bucket) }}" enctype="multipart/form-data" class="form-row">
+                    @csrf
+                    <input type="hidden" name="prefix" value="{{ $prefix }}">
+                    <input type="file" name="files[]" multiple required aria-label="Files to upload">
+                    <button type="submit">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Upload
+                    </button>
+                </form>
+                <form method="POST" action="{{ route('objects.folder', $bucket) }}" class="form-row">
+                    @csrf
+                    <input type="hidden" name="prefix" value="{{ $prefix }}">
+                    <input type="text" name="name" class="input-sm" placeholder="new-folder" required maxlength="255" pattern="[^/\\]+" title="Folder name without slashes" aria-label="New folder name">
+                    <button type="submit" class="ghost">New folder</button>
+                </form>
             </div>
         </div>
 
         <div class="card">
-            <h2>Upload to {{ $prefix ?: '/' }}</h2>
-            <form method="POST" action="{{ route('objects.store', $bucket) }}" enctype="multipart/form-data" class="form-row">
-                @csrf
-                <input type="hidden" name="prefix" value="{{ $prefix }}">
-                <input type="file" name="file" required>
-                <button type="submit">Upload</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Contents</h2>
-            @if (empty($folders) && empty($objects))
+            <div class="card-head">
+                <h2>Contents <span class="count">{{ count($folders) + count($objects) }}{{ $nextToken ? '+' : '' }}</span></h2>
+            </div>
+            @if (empty($folders) && empty($objects) && ! $prefix && ! $isPaged)
                 <div class="empty-state">
-                    <p>This folder is empty.</p>
+                    <p>This bucket is empty. Upload files above or use any S3 client.</p>
                 </div>
             @else
                 <div class="table-wrap">
-                <table>
+                <table class="fm-table">
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Size</th>
-                            <th></th>
+                            <th class="col-num">Size</th>
+                            <th>Last modified</th>
+                            <th class="col-actions"></th>
                         </tr>
                     </thead>
                     <tbody>
                         @if ($prefix)
                             <tr class="fm-row-folder">
-                                <td colspan="3">
-                                    <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $parentPrefix ?: '']) }}" class="fm-entry fm-folder">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                                        ..
+                                <td colspan="4">
+                                    <a href="{{ $folderUrl($parentPrefix) }}" class="fm-entry fm-folder">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                                        Parent folder
                                     </a>
                                 </td>
                             </tr>
                         @endif
                         @foreach ($folders as $folder)
                             <tr class="fm-row-folder">
-                                <td colspan="2">
-                                    <a href="{{ route('buckets.show', ['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $folder]) }}" class="fm-entry fm-folder">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                                        {{ basename(rtrim($folder, '/')) }}
+                                <td colspan="4">
+                                    <a href="{{ $folderUrl($folder) }}" class="fm-entry fm-folder">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                        {{ basename(rtrim($folder, '/')) }}/
                                     </a>
                                 </td>
-                                <td></td>
                             </tr>
                         @endforeach
                         @foreach ($objects as $obj)
                             <tr>
                                 <td>
                                     <div class="fm-entry fm-file">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                        <code>{{ basename($obj['key']) }}</code>
+                                        <x-file-icon :name="$obj['key']" />
+                                        <span class="fm-name">{{ basename($obj['key']) }}</span>
                                     </div>
                                 </td>
-                                <td class="muted fm-size">{{ $formatSize($obj['size']) }}</td>
-                                <td>
+                                <td class="muted fm-size col-num">{{ Format::bytes($obj['size']) }}</td>
+                                <td class="muted text-sm" title="{{ $obj['last_modified'] }}">{{ Format::date($obj['last_modified']) }}</td>
+                                <td class="col-actions">
                                     <div class="actions">
-                                        <a href="{{ route('objects.download', $bucket) }}?key={{ urlencode($obj['key']) }}" class="ghost sm" style="padding:0.25rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.75rem;">Download</a>
-                                        <form method="POST" action="{{ route('objects.destroy', $bucket) }}" onsubmit="return confirm('Delete this object?');" style="margin:0;">
+                                        <a href="{{ route('objects.download', ['bucket' => $bucket, 'key' => $obj['key']]) }}" class="btn btn-ghost btn-sm">Download</a>
+                                        <form method="POST" action="{{ route('objects.destroy', $bucket) }}" data-confirm="Delete {{ basename($obj['key']) }}? This cannot be undone.">
                                             @csrf
                                             @method('DELETE')
                                             <input type="hidden" name="key" value="{{ $obj['key'] }}">
@@ -138,42 +145,49 @@
                                 </td>
                             </tr>
                         @endforeach
+                        @if (empty($folders) && empty($objects))
+                            <tr><td colspan="4" class="muted empty-row">This folder is empty.</td></tr>
+                        @endif
                     </tbody>
                 </table>
                 </div>
+
+                @if ($nextToken || $isPaged)
+                    <div class="pager">
+                        @if ($isPaged)
+                            <a href="{{ $folderUrl($prefix) }}" class="btn btn-ghost btn-sm">&larr; First page</a>
+                        @endif
+                        @if ($nextToken)
+                            <a href="{{ route('buckets.show', array_filter(['bucket' => $bucket, 'tab' => 'objects', 'prefix' => $prefix, 'token' => $nextToken])) }}" class="btn btn-ghost btn-sm">Next page &rarr;</a>
+                        @endif
+                    </div>
+                @endif
             @endif
         </div>
     @endif
 
 @else
-    {{-- ===== Keys tab ===== --}}
+    {{-- ===== Access keys tab ===== --}}
     <div class="card">
         <h2>Grant access</h2>
-        <p class="muted text-sm" style="margin-bottom:0.75rem;">Select a key and the permissions to grant on this bucket.</p>
+        <p class="muted text-sm">Pick a key and the permissions it should have on <strong>{{ $bucket }}</strong>.</p>
         @if (count($allKeys) > 0)
-            <form method="POST" action="{{ route('buckets.allow', $bucket) }}">
+            <form method="POST" action="{{ route('buckets.allow', $bucket) }}" class="grant-form">
                 @csrf
-                <div class="form-row" style="margin-bottom:0.5rem;">
-                    <div>
-                        <label for="allow_key">Key</label>
-                        <select id="allow_key" name="key_id" required style="max-width:20rem;">
-                            @foreach ($allKeys as $k)
-                                <option value="{{ $k['id'] }}">{{ $k['name'] }} ({{ $k['id'] }})</option>
-                            @endforeach
-                        </select>
-                    </div>
+                <div>
+                    <label for="allow_key">Key</label>
+                    <select id="allow_key" name="key_id" required>
+                        @foreach ($allKeys as $k)
+                            <option value="{{ $k['id'] }}" @selected(old('key_id') === $k['id'])>{{ $k['name'] }} — {{ $k['id'] }}</option>
+                        @endforeach
+                    </select>
                 </div>
-                <div class="form-row" style="margin-bottom:0.75rem;">
-                    <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                        <input type="checkbox" name="read" value="1" checked> <span class="text-sm">Read</span>
-                    </label>
-                    <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                        <input type="checkbox" name="write" value="1" checked> <span class="text-sm">Write</span>
-                    </label>
-                    <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                        <input type="checkbox" name="owner" value="1" checked> <span class="text-sm">Owner</span>
-                    </label>
-                </div>
+                <fieldset class="perm-toggles">
+                    <legend class="sr-only">Permissions</legend>
+                    <label class="perm-toggle"><input type="checkbox" name="read" value="1" checked> Read</label>
+                    <label class="perm-toggle"><input type="checkbox" name="write" value="1" checked> Write</label>
+                    <label class="perm-toggle"><input type="checkbox" name="owner" value="1"> Owner</label>
+                </fieldset>
                 <button type="submit">Grant</button>
             </form>
         @else
@@ -184,7 +198,9 @@
     </div>
 
     <div class="card">
-        <h2>Authorized keys</h2>
+        <div class="card-head">
+            <h2>Authorized keys <span class="count">{{ count($authorizedKeys) }}</span></h2>
+        </div>
         @if (empty($authorizedKeys))
             <div class="empty-state">
                 <p>No custom keys have access to this bucket yet.</p>
@@ -194,20 +210,26 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Key ID</th>
                         <th>Name</th>
+                        <th>Key ID</th>
                         <th>Permissions</th>
-                        <th></th>
+                        <th class="col-actions"></th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach ($authorizedKeys as $k)
                     <tr>
+                        <td><strong class="key-name">{{ $k['name'] ?: '—' }}</strong></td>
                         <td><code class="text-xs">{{ $k['id'] }}</code></td>
-                        <td>{{ $k['name'] ?: '—' }}</td>
-                        <td class="muted">{{ $k['permissions'] }}</td>
                         <td>
-                            <form method="POST" action="{{ route('buckets.deny', $bucket) }}" onsubmit="return confirm('Revoke all permissions for {{ $k['name'] ?: $k['id'] }}?');" style="margin:0;">
+                            <span class="perm-chips">
+                                @foreach (['read', 'write', 'owner'] as $perm)
+                                    <span @class(['perm-chip', 'is-on' => str_contains($k['permissions'], $perm)])>{{ $perm }}</span>
+                                @endforeach
+                            </span>
+                        </td>
+                        <td class="col-actions">
+                            <form method="POST" action="{{ route('buckets.deny', $bucket) }}" data-confirm="Revoke all permissions of {{ $k['name'] ?: $k['id'] }} on {{ $bucket }}?">
                                 @csrf
                                 <input type="hidden" name="key_id" value="{{ $k['id'] }}">
                                 <input type="hidden" name="read" value="1">
@@ -223,5 +245,7 @@
             </div>
         @endif
     </div>
+
+    <p class="muted text-xs">System keys (<code>johnny-default</code>, <code>johnny-backup</code>) are managed automatically and hidden here.</p>
 @endif
 @endsection

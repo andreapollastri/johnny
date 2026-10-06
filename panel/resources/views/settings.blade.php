@@ -7,7 +7,7 @@
 
 <div class="page-header">
     <h1>Settings</h1>
-    <p class="subtitle">Manage two-factor authentication and panel API tokens. (Check the <a target="_blank" href="{{ route('api.docs') }}">API docs</a> for more information).</p>
+    <p class="subtitle">Two-factor authentication and panel API tokens. See the <a target="_blank" rel="noopener" href="{{ route('api.docs') }}">API docs</a> for the endpoints these tokens unlock.</p>
 </div>
 
 @if ($flashStatus = session('status'))
@@ -24,10 +24,16 @@
 @endif
 
 @if (session('sanctum_token_plain'))
-<div class="card">
+<div class="card card-highlight">
     <h2>New API token</h2>
     <p class="muted text-sm">Copy this token now — it will not be shown again. Use it as <code class="text-xs">Authorization: Bearer …</code></p>
-    <pre class="raw" style="word-break:break-all;">{{ session('sanctum_token_plain') }}</pre>
+    <div class="copy-fields">
+        <div class="copy-field">
+            <span class="copy-label">Token</span>
+            <code id="new-api-token">{{ session('sanctum_token_plain') }}</code>
+            <button type="button" class="ghost sm" data-copy-from="#new-api-token">Copy</button>
+        </div>
+    </div>
 </div>
 @endif
 
@@ -35,7 +41,7 @@
     <h2>Two-factor authentication</h2>
 
     @if ($user->hasEnabledTwoFactorAuthentication())
-        <p class="muted" style="margin-bottom:0.75rem;">Two-factor authentication is enabled.</p>
+        <p class="tfa-state"><span class="badge badge-success">Enabled</span> <span class="muted">Sign-ins require a code from your authenticator app.</span></p>
         <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-2">
             @csrf
             @method('DELETE')
@@ -53,8 +59,8 @@
                         @endforeach
                     </div>
                     <div class="recovery-codes-actions">
-                        <button type="button" class="ghost sm" id="recovery-codes-copy-btn" onclick="copyRecoveryCodes()">Copy all</button>
-                        <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0; display:inline;" onsubmit="return confirm('Regenerate all recovery codes? The current codes will stop working immediately.');">
+                        <button type="button" class="ghost sm" data-copy-from="#recovery-codes-plain">Copy all</button>
+                        <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0; display:inline;" data-confirm="Regenerate all recovery codes? The current codes will stop working immediately.">
                             @csrf
                             <button type="submit" class="ghost sm">Regenerate codes</button>
                         </form>
@@ -62,36 +68,22 @@
                     <pre id="recovery-codes-plain" class="recovery-codes-plain">{{ implode("\n", $recoveryCodes) }}</pre>
                 @else
                     <p class="muted text-sm">No recovery codes left. Generate a new set.</p>
-                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" onsubmit="return confirm('Generate new recovery codes?');">
+                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" data-confirm="Generate new recovery codes?">
                         @csrf
                         <button type="submit" class="ghost sm">Generate recovery codes</button>
                     </form>
                 @endif
             </div>
-            <script>
-            function copyRecoveryCodes() {
-                var pre = document.getElementById('recovery-codes-plain');
-                var btn = document.getElementById('recovery-codes-copy-btn');
-                if (!pre || !navigator.clipboard) return;
-                navigator.clipboard.writeText(pre.textContent.trim()).then(function() {
-                    if (btn) {
-                        var t = btn.textContent;
-                        btn.textContent = 'Copied';
-                        setTimeout(function() { btn.textContent = t; }, 2000);
-                    }
-                });
-            }
-            </script>
         @else
             <div style="margin-top:1.25rem;">
                 <p class="muted text-sm" style="margin-bottom:0.75rem;">Recovery codes are not displayed here after setup. Regenerate to get a new set (you will see them once after each regeneration).</p>
                 @if ($recoveryCodesExhausted)
-                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" onsubmit="return confirm('Generate new recovery codes?');">
+                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" data-confirm="Generate new recovery codes?">
                         @csrf
                         <button type="submit" class="ghost sm">Generate recovery codes</button>
                     </form>
                 @else
-                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" onsubmit="return confirm('Regenerate all recovery codes? The current codes will stop working immediately.');">
+                    <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" data-confirm="Regenerate all recovery codes? The current codes will stop working immediately.">
                         @csrf
                         <button type="submit" class="ghost sm">Regenerate recovery codes</button>
                     </form>
@@ -118,14 +110,14 @@
             </div>
             <button type="submit">Confirm and enable</button>
         </form>
-        <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-1" onsubmit="return confirm('Cancel two-factor setup? You can start again later.');">
+        <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-1" data-confirm="Cancel two-factor setup? You can start again later.">
             @csrf
             @method('DELETE')
             <button type="submit" class="ghost">Cancel setup</button>
         </form>
 
     @else
-        <p class="muted">Protect your account with time-based one-time passwords (TOTP).</p>
+        <p class="tfa-state"><span class="badge badge-muted">Disabled</span> <span class="muted">Protect your account with time-based one-time passwords (TOTP).</span></p>
         <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-2">
             @csrf
             <button type="submit">Enable 2FA</button>
@@ -154,17 +146,17 @@
                 <th>Name</th>
                 <th>Last used</th>
                 <th>Created</th>
-                <th></th>
+                <th class="col-actions"></th>
             </tr>
         </thead>
         <tbody>
         @foreach ($tokens as $t)
             <tr>
-                <td>{{ $t->name }}</td>
+                <td><strong class="key-name">{{ $t->name }}</strong></td>
                 <td class="muted text-sm">{{ $t->last_used_at ? $t->last_used_at->diffForHumans() : '—' }}</td>
-                <td class="muted text-sm">{{ $t->created_at->format('Y-m-d H:i') }}</td>
-                <td>
-                    <form method="POST" action="{{ route('settings.tokens.destroy', $t->id) }}" onsubmit="return confirm('Revoke this token? Apps using it will stop working.');" style="margin:0;">
+                <td class="muted text-sm">{{ $t->created_at->timezone(config('app.timezone'))->format('M j, Y H:i') }}</td>
+                <td class="col-actions">
+                    <form method="POST" action="{{ route('settings.tokens.destroy', $t->id) }}" data-confirm="Revoke this token? Apps using it will stop working." style="margin:0;">
                         @csrf
                         @method('DELETE')
                         <button type="submit" class="danger sm">Revoke</button>

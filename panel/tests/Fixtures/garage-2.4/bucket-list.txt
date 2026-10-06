@@ -1,0 +1,4 @@
+ID                Created     Global aliases  Local aliases
+3422c394a403d778  2026-10-07  default         
+f1b17fa555341ee2  2026-10-07  media           
+6fd1ee2fbf0085d2  2026-10-07  tenant-acme     
