@@ -20,6 +20,7 @@ die() { echo "Error: $*" >&2; exit 1; }
 
 command -v curl >/dev/null || { apt-get update && apt-get install -y curl ca-certificates openssl; }
 command -v python3 >/dev/null || { apt-get update && apt-get install -y python3; }
+command -v jq >/dev/null || { apt-get update && apt-get install -y jq; }
 
 ARCH="$(uname -m)"
 case "$ARCH" in
@@ -89,6 +90,10 @@ sync_johnny_share
 # Remember where the repo lives so `johnny update` works without arguments.
 echo "$REPO_ROOT" > "${CONFIG_DIR}/repo.path"
 chmod 644 "${CONFIG_DIR}/repo.path"
+
+# Updates (scripts/johnny-update): its first run writes /etc/johnny/update.env with the defaults
+# (the stable channel, automatic updates on) and its state, which the panel reads.
+bash "${SCRIPT_DIR}/johnny-update" status >/dev/null || echo "Warning: johnny update needs a git checkout of Johnny (git clone), not a copy." >&2
 
 if [[ ! -f /etc/johnny/backup.json ]] && [[ -f "${REPO_ROOT}/config/backup.json.example" ]]; then
   install -m 0600 "${REPO_ROOT}/config/backup.json.example" /etc/johnny/backup.json

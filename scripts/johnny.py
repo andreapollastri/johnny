@@ -278,33 +278,46 @@ def cmd_version() -> None:
 
 
 REPO_PATH_FILE = Path("/etc/johnny/repo.path")
+UPDATER = "/usr/local/share/johnny/scripts/johnny-update"
+UPDATE_COMMANDS = {
+    "check", "apply", "start", "channel", "auto", "status", "ensure",
+    "system", "system-start", "system-auto",
+}
 
 
 def cmd_update(argv: list[str]) -> None:
+    """Hand over to the updater (scripts/johnny-update), as root.
+
+    `johnny update <command> ...` passes through. The forms from before 1.2.0 keep working:
+    `johnny update [PATH]` runs the install steps of the checkout again (ensure), and
+    `johnny update [PATH] --pull` (the old nightly cron line) updates to the newest build of
+    the channel, after the pending migrations that move the nightly to the new schedule.
+    """
     require_root()
-    pull = False
-    pos: list[str] = []
-    for a in argv:
-        if a in ("--pull", "--git-pull"):
-            pull = True
-        else:
-            pos.append(a)
-    repo = pos[0] if pos else ""
+    env = os.environ.copy()
+    if argv and argv[0] in UPDATE_COMMANDS:
+        args = argv
+    elif argv and argv[0] in ("-h", "--help", "help"):
+        args = ["help"]  # the updater prints its usage
+    else:
+        pull = False
+        for a in argv:
+            if a in ("--pull", "--git-pull"):
+                pull = True
+            elif a.startswith("-"):
+                die(f"Unknown option for johnny update: {a} (see johnny help)")
+            else:
+                env["JOHNNY_REPO_ROOT"] = a
+        args = ["--pull"] if pull else ["ensure"]
+    repo = env.get("JOHNNY_REPO_ROOT", "")
     if not repo and REPO_PATH_FILE.is_file():
         repo = REPO_PATH_FILE.read_text().strip()
-    if not repo:
-        die("Repo path unknown. Pass the path or run install.sh first (writes /etc/johnny/repo.path).")
-    update_sh = "/usr/local/share/johnny/scripts/update.sh"
-    if not os.path.isfile(update_sh):
-        candidate = os.path.join(repo, "scripts", "update.sh")
-        if os.path.isfile(candidate):
-            update_sh = candidate
-    if not os.path.isfile(update_sh):
-        die(f"Missing update.sh (expected {update_sh} or under the repo scripts/).")
-    extra = [repo]
-    if pull:
-        extra.append("--pull")
-    os.execv("/bin/bash", ["/bin/bash", update_sh, *extra])
+    updater = UPDATER
+    if not os.path.isfile(updater) and repo:
+        updater = os.path.join(repo, "scripts", "johnny-update")
+    if not os.path.isfile(updater):
+        die(f"Missing johnny-update (expected {UPDATER} or under the repo scripts/); run scripts/install.sh.")
+    os.execve("/bin/bash", ["/bin/bash", updater, *args], env)
 
 
 def print_help() -> None:
@@ -312,13 +325,18 @@ def print_help() -> None:
 
 Usage:
   johnny version | -V | --version
-  johnny update [--pull]                   (git pull optional + sync + panel refresh; path auto-detected from install)
+  johnny update check | apply [--auto] [--force] | status
+  johnny update channel stable|beta | auto on|off
+  johnny update system [--auto] | system-auto on|off
+  johnny update start [--force] | system-start   (apply / system, detached: what the panel runs)
+  johnny update ensure                     (the install steps of the checkout again; also: johnny update)
   johnny backup list | create | delete | update | run | set-retention
   johnny <garage-args>...     (passed to garage -c /etc/johnny/garage.toml as user 'johnny')
 
 Examples:
   johnny version
-  sudo johnny update --pull
+  sudo johnny update check
+  sudo johnny update apply
   sudo johnny backup list
   sudo johnny backup create vps-us-abc --host 203.0.113.10 --user backup
   sudo johnny backup set-retention 90

@@ -1,4 +1,19 @@
-# Install to /etc/sudoers.d/johnny-panel (chmod 440) so the PHP-FPM user can run Garage CLI as johnny.
+# Install to /etc/sudoers.d/johnny-panel (chmod 440) so the PHP-FPM user can run Garage CLI as johnny,
+# and check, start and configure updates as root: those exact command lines only, no wildcards
+# (sudo matches the arguments as written). See scripts/johnny-update.
 # Adjust www-data if your distro uses nginx/php-fpm with another user.
 
+Cmnd_Alias JOHNNY_UPDATE = /usr/local/bin/johnny update status, \
+                           /usr/local/bin/johnny update check, \
+                           /usr/local/bin/johnny update start, \
+                           /usr/local/bin/johnny update start --force, \
+                           /usr/local/bin/johnny update channel stable, \
+                           /usr/local/bin/johnny update channel beta, \
+                           /usr/local/bin/johnny update auto on, \
+                           /usr/local/bin/johnny update auto off, \
+                           /usr/local/bin/johnny update system-start, \
+                           /usr/local/bin/johnny update system-auto on, \
+                           /usr/local/bin/johnny update system-auto off
+
 www-data ALL=(johnny) NOPASSWD: /usr/local/bin/johnny
+www-data ALL=(root) NOPASSWD: JOHNNY_UPDATE

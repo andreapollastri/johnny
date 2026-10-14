@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync johnny.py, scripts, migrations, lib, and config examples to /usr/local/share/johnny.
+# Sync johnny.py, scripts (the updater johnny-update too), migrations, lib, and config examples to /usr/local/share/johnny.
 # Requires: SCRIPT_DIR (repo scripts/), REPO_ROOT, optional INSTALL_PREFIX (default /usr/local).
 
 sync_johnny_share() {
@@ -11,7 +11,7 @@ sync_johnny_share() {
     install -m 0644 "${REPO_ROOT}/VERSION" "${SHARE}/VERSION"
   fi
   local f
-  for f in bootstrap-single-node.sh install-rclone.sh backup-replicate.sh replicate-run.sh autoinstall.sh install-panel.sh update.sh johnny-nightly-backup.sh johnny-nightly-backup.py johnny_garage_bucket_list.py ensure-system-keys-on-buckets.py; do
+  for f in bootstrap-single-node.sh install-rclone.sh backup-replicate.sh replicate-run.sh autoinstall.sh install-panel.sh update.sh johnny-update johnny-nightly-backup.sh johnny-nightly-backup.py johnny_garage_bucket_list.py ensure-system-keys-on-buckets.py; do
     if [[ -f "${SCRIPT_DIR}/${f}" ]]; then
       install -m 0755 "${SCRIPT_DIR}/${f}" "${SHARE}/scripts/${f}"
     fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install PHP, Composer, Laravel panel, permissions, sudoers for `johnny key` from the panel.
+# Install PHP, Composer, Laravel panel, permissions, sudoers for `johnny key` and `johnny update` from the panel.
 # Run as root. Optional second arg: APP_URL for the panel (https://panel.example.com).
 # Usage: sudo bash scripts/install-panel.sh /path/to/johnny/repo [APP_URL]
 set -euo pipefail
@@ -91,9 +91,10 @@ run_wwwdata php "$PANEL_DIR/artisan" config:cache
 run_wwwdata php "$PANEL_DIR/artisan" route:cache
 run_wwwdata php "$PANEL_DIR/artisan" view:cache
 
+# Garage CLI as johnny, and the update commands of the Updates page as root (exact command lines).
 if [[ -f "${REPO_ROOT}/config/johnny-panel.sudoers.example" ]]; then
+  visudo -cf "${REPO_ROOT}/config/johnny-panel.sudoers.example" || die "Invalid sudoers file"
   install -m 0440 "${REPO_ROOT}/config/johnny-panel.sudoers.example" /etc/sudoers.d/johnny-panel
-  visudo -cf /etc/sudoers.d/johnny-panel || die "Invalid sudoers file"
 fi
 
 echo "Laravel panel installed at $PANEL_DIR"

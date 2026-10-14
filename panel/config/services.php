@@ -50,6 +50,16 @@ return [
         // Leave JOHNNY_CLI_SUDO_USER empty to call the binary directly (local demo, containers).
         'binary' => env('JOHNNY_CLI_BINARY', '/usr/local/bin/johnny'),
         'sudo_user' => env('JOHNNY_CLI_SUDO_USER', 'johnny'),
+
+        // Updates: the root updater (scripts/johnny-update) keeps its state in a JSON file the panel
+        // reads; checking, starting and switching go through `sudo -n johnny update …` as root
+        // (the exact command lines in /etc/sudoers.d/johnny-panel).
+        'updates' => [
+            'state' => env('JOHNNY_UPDATE_STATE', '/var/lib/johnny-update/state.json'),
+            'sudo' => (bool) env('JOHNNY_UPDATE_SUDO', true),
+            'version_file' => env('JOHNNY_VERSION_FILE', base_path('../VERSION')),
+            'repository' => env('JOHNNY_REPOSITORY_URL', 'https://github.com/andreapollastri/johnny'),
+        ],
     ],
 
 ];

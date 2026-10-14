@@ -874,7 +874,7 @@
     "url": "https://johnny.web.ap.it",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux",
-    "softwareVersion": "1.1.0",
+    "softwareVersion": "1.2.0",
     "screenshot": "https://johnny.web.ap.it/img/dashboard.jpg",
     "license": "https://github.com/andreapollastri/johnny/blob/main/LICENSE",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -985,7 +985,7 @@
         <div class="coverage-row">
           <span class="n">06</span>
           <span class="name">Self-updating</span>
-          <span class="desc">Nightly cron pulls the latest release, runs migrations, and refreshes the panel.</span>
+          <span class="desc">Stable releases or beta (main), nightly or from the panel, with a database backup and rollback. Server packages too.</span>
           <span class="tag">Ops</span>
         </div>
         <div class="coverage-row">
@@ -1287,8 +1287,20 @@
                   <td>Garage cluster status</td>
                 </tr>
                 <tr>
-                  <td><code>johnny update [--pull]</code></td>
-                  <td>Update installation</td>
+                  <td><code>johnny update check|apply [--force]|status</code></td>
+                  <td>Check, install or report updates</td>
+                </tr>
+                <tr>
+                  <td><code>johnny update channel stable|beta</code></td>
+                  <td>Follow release tags or the head of main</td>
+                </tr>
+                <tr>
+                  <td><code>johnny update auto|system-auto on|off</code></td>
+                  <td>Nightly Johnny / server updates</td>
+                </tr>
+                <tr>
+                  <td><code>johnny update system</code></td>
+                  <td>Update every package of the server</td>
                 </tr>
                 <tr>
                   <td><code>johnny bucket list|create</code></td>
@@ -1465,21 +1477,29 @@
         <article class="doc-block" id="doc-updates">
           <h3>Updates</h3>
           <p>
-            Repo path is saved in <code>/etc/johnny/repo.path</code>. Nightly cron runs
-            <code>johnny update --pull</code> at 02:30.
+            Johnny updates itself in place, in the git checkout named by <code>/etc/johnny/repo.path</code>:
+            from the panel's <strong>Updates</strong> page, every night, or by hand.
           </p>
           <div class="code-block">
             <div class="code-header">
               <span>bash</span>
-              <button class="copy-btn" type="button" data-copy="sudo johnny update --pull">Copy</button>
+              <button class="copy-btn" type="button" data-copy="sudo johnny update check">Copy</button>
             </div>
-            <pre><span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">--pull</span></pre>
+            <pre><span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">check</span>    <span class="tok-cmt"># what the channel would install</span>
+<span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">apply</span>    <span class="tok-cmt"># install it now</span>
+<span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">channel beta</span></pre>
           </div>
-          <p style="margin-top:0.85rem">
-            Pulls the latest release, syncs scripts, runs Composer + migrations + cache rebuild when
-            the panel is present, and applies numbered scripts from <code>scripts/migrations/</code>.
-            Log: <code>/var/log/johnny-update.log</code>.
-          </p>
+          <ul>
+            <li><strong>stable</strong> (default) installs the newest release tag (<code>X.Y.Z</code>; <code>vX.Y.Z</code> and <code>X.Y</code> are read too);
+              <strong>beta</strong> follows the head of <code>main</code>. A build is installed only when it contains the installed commit: never backwards.</li>
+            <li>Each update backs up the panel database (SQLite, MySQL/MariaDB, PostgreSQL) to <code>/var/backups/johnny</code>,
+              checks the build out, runs its install steps (scripts, Composer, migrations, caches) and a health check;
+              a failure puts the previous commit and the database back.</li>
+            <li>Nightly: server packages at 02:00 (<code>johnny update system --auto</code>), Johnny at 02:30
+              (<code>johnny update apply --auto</code>), backup at 03:00. Switches live in <code>/etc/johnny/update.env</code>.</li>
+            <li>From 1.1.x the old <code>johnny update --pull</code> line keeps working and moves the server to this schedule.</li>
+          </ul>
+          <p style="margin-top:0.85rem">Log: <code>/var/log/johnny-update.log</code>.</p>
         </article>
 
         <article class="doc-block" id="doc-security">
@@ -1524,6 +1544,10 @@
                 <tr>
                   <td><code>/etc/johnny/repo.path</code></td>
                   <td>Path to the Johnny repo</td>
+                </tr>
+                <tr>
+                  <td><code>/etc/johnny/update.env</code></td>
+                  <td>Update channel and nightly switches</td>
                 </tr>
                 <tr>
                   <td><code>/etc/cron.d/johnny-nightly</code></td>
@@ -1573,7 +1597,7 @@
             Source and issues:
             <a class="link-inline" href="https://github.com/andreapollastri/johnny" target="_blank"
               rel="noopener">github.com/andreapollastri/johnny</a>
-            · MIT License · v1.1.0
+            · MIT License · v1.2.0
           </p>
         </article>
       </div>
@@ -1583,7 +1607,7 @@
   <footer>
     <div>
       &copy; 2026 <a href="https://andreapollastri.net" target="_blank" rel="noopener" style="margin-left:0">Andrea
-        Pollastri</a> — MIT License · v1.1.0
+        Pollastri</a> — MIT License · v1.2.0
     </div>
     <div>
       <a href="https://github.com/andreapollastri/johnny" target="_blank" rel="noopener">GitHub</a>

@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Update Johnny: optional git pull, sync scripts to /usr/local/share/johnny, refresh panel/ if present,
-# then run any pending numbered migrations from scripts/migrations/.
-# Usage: sudo bash scripts/update.sh [/path/to/johnny/repo] [--pull]
+# The install steps of the Johnny checkout as it is, without touching git: sync scripts to
+# /usr/local/share/johnny, refresh panel/ if present, run pending numbered migrations from
+# scripts/migrations/, re-apply the system keys on every bucket.
+#
+# Run by johnny-update after it checks a build out (and again on the previous build when an
+# update fails), and by `sudo johnny update ensure` (or `sudo johnny update` alone).
+# Updating to a newer build is `sudo johnny update apply` (see scripts/johnny-update).
+#
+# Usage: sudo bash scripts/update.sh [/path/to/johnny/repo]
 # If no path is given, reads from /etc/johnny/repo.path (written by install.sh).
+# --pull (git pull first, before 1.2.0) now hands over to johnny-update, which updates
+# to the newest build of the channel instead.
 set -euo pipefail
 
 die() { echo "Error: $*" >&2; exit 1; }
@@ -31,20 +39,19 @@ REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
 SCRIPT_DIR="$REPO_ROOT/scripts"
 export REPO_ROOT
 
+if [[ "$GIT_PULL" == "1" ]]; then
+  JOHNNY_REPO_ROOT="$REPO_ROOT" exec bash "$SCRIPT_DIR/johnny-update" --pull
+fi
+
 VER="unknown"
 if [[ -f "$REPO_ROOT/VERSION" ]]; then
   VER="$(tr -d '[:space:]' <"$REPO_ROOT/VERSION")"
 fi
-echo "Johnny $VER — update"
+echo "Johnny $VER — install steps"
 
-if [[ "$GIT_PULL" == "1" ]]; then
+# Git 2.35+ blocks git in repos whose owner differs from the current user (Composer may call git).
+if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_ROOT"; then
   git config --global --add safe.directory "$REPO_ROOT"
-  echo "Git: pulling latest..."
-  git -C "$REPO_ROOT" pull --ff-only
-  # Re-read version after pull
-  if [[ -f "$REPO_ROOT/VERSION" ]]; then
-    VER="$(tr -d '[:space:]' <"$REPO_ROOT/VERSION")"
-  fi
 fi
 
 # 1. Sync scripts, lib, config examples, VERSION to /usr/local/share/johnny
@@ -61,7 +68,6 @@ if [[ -f "$PANEL_DIR/artisan" ]]; then
   if ! run_wwwdata bash -c 'cd "$PANEL_DIR" && pwd' >/dev/null 2>&1; then
     echo "Panel: not accessible as www-data — skip (clone outside /root)." >&2
   else
-    git config --global --add safe.directory "$REPO_ROOT"
     export COMPOSER_ALLOW_SUPERUSER=1
     echo "Panel: composer install..."
     composer install --no-dev --optimize-autoloader --no-interaction --working-dir="$PANEL_DIR"
@@ -107,4 +113,4 @@ if [[ -f "$ENSURE_PY" && -f /etc/johnny/garage.toml && -x /usr/local/bin/garage 
   python3 "$ENSURE_PY" || echo "Warning: ensure-system-keys-on-buckets.py failed — check output above." >&2
 fi
 
-echo "Update finished — Johnny $VER."
+echo "Install steps finished — Johnny $VER."

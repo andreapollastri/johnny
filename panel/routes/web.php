@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\KeyController;
 use App\Http\Controllers\ObjectController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\UpdateController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -34,4 +35,15 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/keys', [KeyController::class, 'index'])->name('keys.index');
     Route::post('/keys', [KeyController::class, 'store'])->name('keys.store');
     Route::delete('/keys', [KeyController::class, 'destroy'])->name('keys.destroy');
+
+    // Updates are for administrators. The panel has no roles: every signed-in user is one,
+    // so `auth` is the whole check (add one here if the panel ever gets roles).
+    Route::get('/updates', [UpdateController::class, 'show'])->name('updates.show');
+    Route::get('/updates/status', [UpdateController::class, 'status'])->name('updates.status');
+    Route::post('/updates/check', [UpdateController::class, 'check'])->name('updates.check');
+    Route::post('/updates/start', [UpdateController::class, 'start'])->name('updates.start');
+    Route::post('/updates/channel', [UpdateController::class, 'channel'])->name('updates.channel');
+    Route::post('/updates/auto', [UpdateController::class, 'auto'])->name('updates.auto');
+    Route::post('/updates/system/start', [UpdateController::class, 'systemStart'])->name('updates.system.start');
+    Route::post('/updates/system/auto', [UpdateController::class, 'systemAuto'])->name('updates.system.auto');
 });

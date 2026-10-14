@@ -18,7 +18,7 @@ read -r -p "Continue? [y/N] " ok
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y python3 caddy rclone openssh-client curl ca-certificates openssl
+apt-get install -y python3 caddy rclone openssh-client curl ca-certificates openssl git jq
 
 bash "${SCRIPT_DIR}/install.sh"
 
@@ -153,8 +153,10 @@ CRON_FILE="/etc/cron.d/johnny-nightly"
 cat > "$CRON_FILE" <<'CRON'
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 SHELL=/bin/bash
-# Nightly self-update (git pull + sync + panel refresh + migrations)
-30 2 * * * root /usr/local/bin/johnny update --pull >> /var/log/johnny-update.log 2>&1
+# Nightly server update: every package to its newest version (SYSTEM_UPDATE in /etc/johnny/update.env)
+0 2 * * * root /usr/local/bin/johnny update system --auto >> /var/log/johnny-update.log 2>&1
+# Nightly Johnny update: the newest build of the channel (AUTO_UPDATE in /etc/johnny/update.env)
+30 2 * * * root /usr/local/bin/johnny update apply --auto >> /var/log/johnny-update.log 2>&1
 # Nightly SFTP backup + retention (primary VPS only)
 0 3 * * * root /usr/local/share/johnny/scripts/johnny-nightly-backup.sh >> /var/log/johnny-nightly.log 2>&1
 CRON
@@ -170,7 +172,8 @@ echo "Default app credentials: /etc/johnny/credentials/default-s3.env  (source b
 echo "Internal backup key file: /etc/johnny/credentials/backup-internal-s3.env"
 echo "Manage SFTP backups: sudo johnny backup list | create | delete | update | run"
 echo "Retention (days): sudo johnny backup set-retention 90"
-echo "Logs: /var/log/johnny-nightly.log"
+echo "Logs: /var/log/johnny-nightly.log (backup), /var/log/johnny-update.log (updates)"
+echo "Updates: the newest release every night at 02:30, server packages at 02:00 — sudo johnny update status | channel beta | auto off"
 if [[ "${PANEL_INSTALLED:-0}" -eq 1 ]]; then
   echo "Web panel: https://${PANEL_DOMAIN}"
 fi

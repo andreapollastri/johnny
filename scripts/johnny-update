@@ -1,0 +1,754 @@
+#!/usr/bin/env bash
+#
+# johnny-update — keeps this server on the newest build of Johnny for its channel.
+#
+# Runs as root, as `johnny update …`: from the panel's Updates page (through
+# systemd-run, so the page answers at once), every night from /etc/cron.d/johnny-nightly
+# while automatic updates are on, or by hand.
+#
+# Channels (UPDATE_CHANNEL in /etc/johnny/update.env):
+#   stable  the newest release tag, X.Y.Z (vX.Y.Z and X.Y are read too; the default)
+#   beta    the head of the main branch, for beta testers
+# An update never goes backwards: a build is installed only when it contains the
+# installed commit. Back on stable after beta, Johnny keeps its main build until a
+# release contains it.
+#
+#   johnny update check                  what the channel would install, as JSON
+#   johnny update apply [--auto] [--force]
+#                                        install it; --force installs the channel's newest build
+#                                        again even when it is the installed one (never an older
+#                                        one), and also when its history differs
+#   johnny update start [--force]        apply, detached (systemd-run): for the panel
+#   johnny update channel stable|beta    which builds to follow
+#   johnny update auto on|off            automatic updates every night (02:30)
+#   johnny update status                 the last check and the last run, as JSON
+#   johnny update ensure                 the install steps of the checked-out build, again
+#                                        (also: johnny update, with no arguments)
+#   johnny update system [--auto]        the server itself: apt full-upgrade, Composer, rclone,
+#                                        the services whose packages changed, the health check;
+#                                        nightly at 02:00, before Johnny's own update
+#   johnny update system-start           system, detached (systemd-run): for the panel
+#   johnny update system-auto on|off     the nightly server update
+#
+# Johnny installs in place, in the git checkout named by /etc/johnny/repo.path.
+# One update, in order:
+#   1. fetch the build into the checkout; a tag's VERSION must match it
+#   2. back up the panel database (/var/backups/johnny, the newest 5 kept)
+#   3. maintenance mode on the panel
+#   4. git checkout --force --detach <the build>
+#   5. its install steps (scripts/update.sh): scripts to /usr/local/share/johnny,
+#      the panel (composer, migrate, caches), numbered migrations, system keys
+#   6. maintenance off, PHP-FPM reloaded, health check (the panel answers, garage status)
+# A failure from step 4 on checks the previous commit out again, restores the
+# database, and runs its install steps again.
+#
+# shellcheck disable=SC2016  # the jq filters are in single quotes on purpose
+set -euo pipefail
+umask 022
+
+# JOHNNY_UPDATE_SANDBOX: for the updater's own tests only, a directory standing in for /
+ROOT=${JOHNNY_UPDATE_SANDBOX:-}
+ETC=$ROOT/etc/johnny
+CONF=$ETC/update.env
+STATE_DIR=$ROOT/var/lib/johnny-update
+STATE=$STATE_DIR/state.json
+MIRROR=$STATE_DIR/repo.git
+LOG=$ROOT/var/log/johnny-update.log
+BACKUPS=$ROOT/var/backups/johnny
+LOCK=$ROOT/run/lock/johnny-update.lock
+KEEP_BACKUPS=5
+DEFAULT_REPO=https://github.com/andreapollastri/johnny.git
+
+[ -n "$ROOT" ] || [ "$(id -u)" = 0 ] || { echo "johnny update must run as root (sudo)" >&2; exit 1; }
+REPO_ROOT=${JOHNNY_REPO_ROOT:-$(tr -d '[:space:]' < "$ETC/repo.path" 2>/dev/null || true)}
+[ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] || { echo "Johnny's git checkout was not found ($ETC/repo.path, written by install.sh)" >&2; exit 1; }
+REPO_ROOT=$(cd "$REPO_ROOT" && pwd)
+PANEL_DIR=$REPO_ROOT/panel
+export REPO_ROOT
+
+# ------------------------------------------------------------------ helpers --
+
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+say() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
+bool() { if "$@"; then echo true; else echo false; fi; }
+
+# Release tags: X.Y.Z, also vX.Y.Z and X.Y; tag_version gives the version one stands for
+is_tag() { [[ "$1" =~ ^v?[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; }
+tag_version() { local v=${1#v}; if [[ "$v" =~ ^[0-9]+\.[0-9]+$ ]]; then v=$v.0; fi; echo "$v"; }
+
+env_value() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tail -n1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+
+# the checkout, as root, whoever cloned it
+repo() { git -c safe.directory="$REPO_ROOT" -C "$REPO_ROOT" "$@"; }
+
+# need COMMAND PACKAGE — what the updater runs on, installed when an older server lacks it
+need() {
+    command -v "$1" >/dev/null 2>&1 && return 0
+    [ -z "$ROOT" ] || { echo "$1 is missing" >&2; exit 1; }
+    { DEBIAN_FRONTEND=noninteractive apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$2"; } >/dev/null 2>&1 \
+        || { echo "$1 is missing and could not be installed (apt-get install $2)" >&2; exit 1; }
+}
+
+# /etc/johnny/update.env, with its defaults the first time; it updates from the checkout's origin
+conf_init() {
+    [ -f "$CONF" ] && return 0
+    local origin
+    origin=$(repo remote get-url origin 2>/dev/null || true)
+    case "$origin" in https://*|ssh://*|git@*) ;; *) origin=$DEFAULT_REPO ;; esac
+    mkdir -p "$ETC"
+    cat > "$CONF" <<EOF
+# Johnny updates (johnny update channel|auto|system-auto change this file).
+# UPDATE_CHANNEL: stable (the newest release tag) or beta (the head of main)
+UPDATE_CHANNEL=stable
+# AUTO_UPDATE=1: every night at 02:30, the newest build of the channel
+AUTO_UPDATE=1
+# SYSTEM_UPDATE=1: every night at 02:00, every package of the server to its newest version
+SYSTEM_UPDATE=1
+# SYSTEM_REBOOT=1: reboot 5 minutes after a nightly server update that requires it
+SYSTEM_REBOOT=0
+# Where the builds come from
+JOHNNY_REPO=$origin
+EOF
+    chmod 644 "$CONF"
+}
+
+load_conf() {
+    UPDATE_CHANNEL=stable AUTO_UPDATE=1 SYSTEM_UPDATE=1 SYSTEM_REBOOT=0 JOHNNY_REPO=$DEFAULT_REPO
+    # shellcheck disable=SC1090
+    [ -f "$CONF" ] && . "$CONF"
+    JOHNNY_REPO=${JOHNNY_REPO:-$DEFAULT_REPO}
+}
+
+channel() { [ "${UPDATE_CHANNEL:-stable}" = beta ] && echo beta || echo stable; }
+
+# set_conf KEY VALUE — one line of /etc/johnny/update.env
+set_conf() {
+    conf_init
+    local tmp; tmp=$(mktemp "$CONF.XXXXXX")
+    awk -v k="$1" -v v="$2" 'index($0, k "=") == 1 { print k "=" v; done = 1; next } { print } END { if (!done) print k "=" v }' "$CONF" > "$tmp"
+    chmod 644 "$tmp"; mv -f "$tmp" "$CONF"
+}
+
+state_read() { [ -s "$STATE" ] && cat "$STATE" || echo '{}'; }
+# state_merge JQ_ARGS... FILTER — merge into the state file, atomically, readable by the panel
+state_merge() {
+    mkdir -p "$STATE_DIR"; chmod 755 "$STATE_DIR"
+    local tmp; tmp=$(mktemp "$STATE_DIR/.state.XXXXXX")
+    state_read | jq "$@" > "$tmp" || { rm -f "$tmp"; return 1; }
+    chmod 644 "$tmp"; mv -f "$tmp" "$STATE"
+}
+
+# settle STATUS MESSAGE — the end of a run that changed nothing
+settle() { state_merge --arg s "$1" --arg m "$2" --arg t "$(now)" '. + {status: $s, message: $m, finished_at: $t}'; }
+
+# The web page of the repository, for the panel's links: https://github.com/<owner>/<name>
+repo_web() { echo "$JOHNNY_REPO" | sed -E -e 's#^git@([^:]+):#https://\1/#' -e 's#^ssh://(git@)?#https://#' -e 's#\.git$##'; }
+
+# ------------------------------------------------------------- the history --
+# A bare, blob-less mirror of the repository: tags, main, and which commit contains which.
+
+mirror() { git -C "$MIRROR" "$@"; }
+
+sync_mirror() {
+    if [ ! -d "$MIRROR" ]; then
+        mkdir -p "$STATE_DIR"
+        git clone -q --bare --filter=blob:none "$JOHNNY_REPO" "$MIRROR" 2>/dev/null \
+            || { rm -rf "$MIRROR"; git clone -q --bare "$JOHNNY_REPO" "$MIRROR" 2>/dev/null; } \
+            || { rm -rf "$MIRROR"; return 1; }
+    fi
+    mirror remote set-url origin "$JOHNNY_REPO"
+    mirror fetch -q --prune --prune-tags --force origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' 2>/dev/null
+}
+
+commit_of() { mirror rev-parse -q --verify "$1^{commit}" 2>/dev/null || true; }
+# newest_tag TAG… — the newest release among them, by the version each stands for
+newest_tag() {
+    local t
+    for t in "$@"; do if is_tag "$t"; then printf '%s %s\n' "$(tag_version "$t")" "$t"; fi; done | sort -V -k1,1 | tail -n1 | cut -d' ' -f2
+}
+# shellcheck disable=SC2046
+latest_tag() { newest_tag $(mirror tag -l 2>/dev/null || true); }
+# contains NEW OLD: the build NEW includes the commit OLD (or is it)
+contains() { mirror merge-base --is-ancestor "$2" "$1" 2>/dev/null; }
+
+# --------------------------------------------------------- what is installed --
+# The commit the checkout is on; its name is the newest release tag on it, otherwise main-<sha>.
+
+installed_commit() { repo rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null || true; }
+installed() {
+    local c t
+    c=$(installed_commit)
+    [ -n "$c" ] || { echo none; return; }
+    # shellcheck disable=SC2046
+    if [ -d "$MIRROR" ]; then t=$(newest_tag $(mirror tag --points-at "$c" 2>/dev/null || true))
+    else t=$(newest_tag $(repo tag --points-at "$c" 2>/dev/null || true))
+    fi
+    if [ -n "$t" ]; then echo "$t"; else echo "main-${c:0:7}"; fi
+}
+
+# plan — what the channel would install:
+# TARGET_REF, TARGET_COMMIT, TARGET_LABEL; AVAILABLE (newer and containing the installed
+# commit); BEHIND (older than what is installed); WAITING and REASON (why nothing moves)
+plan() {
+    local cur cur_commit
+    cur=$(installed); cur_commit=$(installed_commit)
+    TARGET_REF=""; TARGET_COMMIT=""; TARGET_LABEL=""; AVAILABLE=false; BEHIND=false; WAITING=""; REASON=""
+    if [ "$(channel)" = beta ]; then TARGET_REF=main; else TARGET_REF=$(latest_tag); fi
+    if [ -z "$TARGET_REF" ]; then WAITING="No release of Johnny is published yet."; REASON=no-release; return 0; fi
+    if [ "$TARGET_REF" = main ]; then
+        TARGET_COMMIT=$(commit_of refs/heads/main); TARGET_LABEL="main-${TARGET_COMMIT:0:7}"
+    else
+        TARGET_COMMIT=$(commit_of "refs/tags/$TARGET_REF"); TARGET_LABEL=$TARGET_REF
+    fi
+    if [ -z "$TARGET_COMMIT" ]; then WAITING="$TARGET_REF is not in the repository."; REASON=missing; TARGET_LABEL=""; return 0; fi
+
+    if [ -z "$cur_commit" ]; then
+        AVAILABLE=true
+    elif [ "$cur_commit" = "$TARGET_COMMIT" ]; then
+        : # the same code (a main build that became a release is that release already: Johnny installs in place)
+    elif contains "$TARGET_COMMIT" "$cur_commit"; then
+        AVAILABLE=true
+    elif contains "$cur_commit" "$TARGET_COMMIT"; then
+        BEHIND=true; REASON=behind
+        WAITING="Johnny runs $cur, newer than $TARGET_LABEL: it stays there until a newer build of the $(channel) channel contains it."
+    else
+        REASON=diverged
+        WAITING="$TARGET_LABEL does not contain the installed $cur (the history differs): Force update installs it anyway."
+    fi
+}
+
+record_check() {
+    local main; main=$(commit_of refs/heads/main)
+    state_merge --arg ch "$(channel)" --arg c "$(installed)" --arg cc "$(installed_commit)" --arg l "$(latest_tag)" \
+        --arg m "${main:+main-${main:0:7}}" --arg tg "$TARGET_LABEL" --argjson a "$AVAILABLE" --arg w "$WAITING" --arg r "$REASON" --arg t "$(now)" \
+        --arg rp "$(repo_web)" --argjson au "$(bool [ "${AUTO_UPDATE:-1}" = 1 ])" --argjson sau "$(bool [ "${SYSTEM_UPDATE:-1}" = 1 ])" \
+        '. + {channel: $ch, current: $c, current_commit: $cc, latest: $l, main: $m, target: $tg, update_available: $a, waiting: $w, waiting_reason: $r, checked_at: $t, repository: $rp, auto: $au}
+         | .system = ((.system // {}) + {auto: $sau})'
+}
+
+record_unreachable() {
+    state_merge --arg t "$(now)" --arg r "$(repo_web)" \
+        '. + {checked_at: $t, repository: $r, update_available: false, waiting: "The Johnny repository is not reachable.", waiting_reason: "unreachable"}'
+}
+
+# ------------------------------------------------------------------- doing --
+
+as_wwwdata() { sudo -u www-data env PANEL_DIR="$PANEL_DIR" "$@"; }
+
+panel_installed() { [ -f "$PANEL_DIR/artisan" ] && [ -f "$PANEL_DIR/.env" ] && [ -d "$PANEL_DIR/vendor" ]; }
+artisan() { as_wwwdata php "$PANEL_DIR/artisan" "$@"; }
+
+# The install steps of the code checked out now: its own scripts/update.sh
+install_tree() { bash "$REPO_ROOT/scripts/update.sh" "$REPO_ROOT"; }
+
+php_fpm_units() { systemctl list-units --type=service --state=active --no-legend --plain 'php*-fpm.service' 2>/dev/null | awk '{print $1}'; }
+# PHP-FPM serves the new code at once (opcache), and keeps every request it is answering
+reload_php_fpm() {
+    local u
+    for u in $(php_fpm_units); do systemctl reload "$u" 2>/dev/null || systemctl restart "$u" || say "$u did not restart"; done
+}
+
+# ---- the panel's database: SQLite (the default), MySQL/MariaDB or PostgreSQL, from panel/.env
+
+db_connection() { local c; c=$(env_value "$PANEL_DIR/.env" DB_CONNECTION); echo "${c:-sqlite}"; }
+db_env() { env_value "$PANEL_DIR/.env" "$1"; }
+
+sqlite_path() {
+    local p; p=$(db_env DB_DATABASE)
+    if [ -z "$p" ]; then echo "$PANEL_DIR/database/database.sqlite"
+    elif [[ "$p" == /* ]]; then echo "$p"
+    elif [ -f "$PANEL_DIR/database/$p" ]; then echo "$PANEL_DIR/database/$p"
+    else echo "$PANEL_DIR/$p"
+    fi
+}
+
+mysql_client() { if command -v mariadb >/dev/null 2>&1; then echo mariadb; else echo mysql; fi; }
+mysql_dumper() { if command -v mariadb-dump >/dev/null 2>&1; then echo mariadb-dump; else echo mysqldump; fi; }
+# mysql_defaults — a client option file with the panel's credentials (removed by the caller)
+mysql_defaults() {
+    local f socket; f=$(mktemp); chmod 600 "$f"
+    socket=$(db_env DB_SOCKET)
+    {
+        echo "[client]"
+        if [ -n "$socket" ]; then echo "socket=$socket"; else echo "host=$(db_env DB_HOST)"; echo "port=$(db_env DB_PORT)"; fi
+        echo "user=$(db_env DB_USERNAME)"
+        echo "password=\"$(db_env DB_PASSWORD | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')\""
+    } > "$f"
+    echo "$f"
+}
+pg_run() { # pg_run COMMAND ARGS… — with the panel's credentials
+    PGHOST=$(db_env DB_HOST) PGPORT=$(db_env DB_PORT) PGUSER=$(db_env DB_USERNAME) PGPASSWORD=$(db_env DB_PASSWORD) PGDATABASE=$(db_env DB_DATABASE) "$@"
+}
+
+# db_backup FROM TO — the panel's database into $BACKUP (empty: nothing to back up); it runs
+# after ||, without set -e: every step that matters says so itself
+db_backup() {
+    BACKUP=""
+    panel_installed || return 0
+    local conn base defaults db tmp
+    conn=$(db_connection)
+    base="$BACKUPS/johnny-panel-$1-to-$2-$(date +%Y%m%d%H%M%S)"
+    mkdir -p "$BACKUPS"; chmod 750 "$BACKUPS"
+    case "$conn" in
+        sqlite)
+            db=$(sqlite_path)
+            [ -f "$db" ] || { say "no panel database at $db: nothing to back up"; return 0; }
+            BACKUP="$base.sqlite.gz"
+            if command -v sqlite3 >/dev/null 2>&1; then
+                tmp=$(mktemp)
+                sqlite3 "$db" ".backup '$tmp'" && gzip -c "$tmp" > "$BACKUP" || { rm -f "$tmp"; return 1; }
+                rm -f "$tmp"
+            else
+                gzip -c "$db" > "$BACKUP" || return 1
+            fi
+            ;;
+        mysql|mariadb)
+            BACKUP="$base.sql.gz"
+            defaults=$(mysql_defaults)
+            "$(mysql_dumper)" --defaults-extra-file="$defaults" --single-transaction --quick --routines --triggers "$(db_env DB_DATABASE)" | gzip -c > "$BACKUP" \
+                || { rm -f "$defaults"; return 1; }
+            rm -f "$defaults"
+            ;;
+        pgsql)
+            BACKUP="$base.sql.gz"
+            pg_run pg_dump --no-owner --no-privileges | gzip -c > "$BACKUP" || return 1
+            ;;
+        *)
+            say "the panel database ($conn) is not one the updater backs up: going on without a backup"
+            return 0
+            ;;
+    esac
+    chmod 600 "$BACKUP"
+    say "panel database backed up to $BACKUP"
+}
+
+# db_restore FILE — the panel's database exactly as backed up, without the tables a migration added
+db_restore() {
+    local conn defaults db client
+    conn=$(db_connection)
+    case "$conn" in
+        sqlite)
+            db=$(sqlite_path)
+            gunzip -c "$1" > "$db.restore" && cat "$db.restore" > "$db" && rm -f "$db.restore" "$db-wal" "$db-shm"
+            ;;
+        mysql|mariadb)
+            defaults=$(mysql_defaults); client=$(mysql_client); db=$(db_env DB_DATABASE)
+            {
+                echo "SET FOREIGN_KEY_CHECKS=0;"
+                "$client" --defaults-extra-file="$defaults" -N -B -e "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()" "$db" \
+                    | while IFS= read -r t; do echo "DROP TABLE IF EXISTS \`$t\`;"; done
+            } | "$client" --defaults-extra-file="$defaults" "$db" \
+                && gunzip -c "$1" | "$client" --defaults-extra-file="$defaults" "$db" \
+                || { rm -f "$defaults"; return 1; }
+            rm -f "$defaults"
+            ;;
+        pgsql)
+            pg_run psql -q -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' \
+                && gunzip -c "$1" | pg_run psql -q -v ON_ERROR_STOP=1 >/dev/null
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+prune_backups() { # the newest KEEP_BACKUPS panel database backups
+    local f
+    # shellcheck disable=SC2012
+    ls -1t "$BACKUPS"/johnny-panel-* 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | while IFS= read -r f; do rm -f "$f"; done
+}
+
+# ---- health: Garage answers, and the panel boots (and answers /up where this server's Caddy serves it)
+
+garage_ok() { /usr/local/bin/johnny status >/dev/null 2>&1; }
+panel_ok() {
+    panel_installed || return 0
+    artisan about --only=environment >/dev/null 2>&1 || { HEALTH="the panel does not boot (php artisan about)"; return 1; }
+    local url host port code
+    url=$(env_value "$PANEL_DIR/.env" APP_URL)
+    host=$(echo "$url" | sed -E 's#^[a-z]+://([^/:]+).*#\1#')
+    [ -n "$host" ] && [ -f /etc/caddy/johnny-panel.caddy ] && grep -qF "$host" /etc/caddy/johnny-panel.caddy || return 0
+    case "$url" in https://*) port=443 ;; *) port=80 ;; esac
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$host:$port:127.0.0.1" "${url%/}/up" || true)
+    [ "$code" = 200 ] || { HEALTH="the panel answered ${code:-nothing} on ${url%/}/up"; return 1; }
+}
+healthy() {
+    HEALTH=""
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if garage_ok; then panel_ok && return 0; else HEALTH="garage status failed"; fi
+        sleep 3
+    done
+    say "health check: $HEALTH"
+    return 1
+}
+
+lock() { # lock [SECONDS] — one update at a time; the nightly runs wait for each other
+    [ -z "${LOCKED:-}" ] || return 0
+    mkdir -p "$(dirname "$LOCK")"
+    exec 9>"$LOCK"
+    if [ "${1:-0}" -gt 0 ]; then
+        flock -w "$1" 9 || { echo "another update is still running after $1 seconds" >&2; exit 1; }
+    else
+        flock -n 9 || { echo "another update is running" >&2; exit 1; }
+    fi
+    LOCKED=1
+}
+lock_free() {
+    command -v flock >/dev/null 2>&1 || return 0   # the sandbox of the tests
+    mkdir -p "$(dirname "$LOCK")"; flock -n "$LOCK" true
+}
+
+# A run marked "running" whose updater holds no lock was cut short (a reboot, a kill): say so.
+reap() {
+    lock_free || return 0
+    state_merge 'def stale: .status == "running" and ((.started_at // null) as $s | $s == null or (now - ($s | fromdateiso8601)) > 600);
+        def cut: . + {status: "failed", message: "The run was interrupted before the end (a reboot?): see /var/log/johnny-update.log.", finished_at: (now | todate)};
+        (if stale then cut else . end) | if (.system // {}) | stale then .system |= cut else . end'
+}
+
+# The log of this run goes to the shared log and, trimmed, into the state for the Updates page.
+start_run_log() {
+    RUNLOG=$(mktemp)
+    touch "$LOG"; chmod 640 "$LOG"
+    # the nightly cron already appends this output to the shared log
+    if [ /dev/stdout -ef "$LOG" ]; then exec > >(tee -a "$RUNLOG") 2>&1; else exec > >(tee -a "$LOG" "$RUNLOG") 2>&1; fi
+}
+finish_state() { # finish_state STATUS MESSAGE
+    sleep 0.2
+    state_merge --arg s "$1" --arg m "$2" --arg t "$(now)" --rawfile log "$RUNLOG" \
+        '. + {status: $s, message: $m, finished_at: $t, log: ($log | split("\n") | map(select(length > 0)) | .[-80:])}'
+}
+
+# ------------------------------------------------------------------ commands --
+
+cmd_check() {
+    reap
+    sync_mirror || { record_unreachable; echo '{"ok":false,"error":"the Johnny repository is not reachable"}'; exit 1; }
+    plan; record_check
+    jq -n --arg ch "$(channel)" --arg c "$(installed)" --arg l "$(latest_tag)" --arg tg "$TARGET_LABEL" \
+        --argjson a "$AVAILABLE" --arg w "$WAITING" --arg r "$REASON" \
+        '{ok: true, channel: $ch, current: $c, latest: $l, target: $tg, update_available: $a, waiting: $w, waiting_reason: $r}'
+}
+
+cmd_status() { state_read; }
+
+cmd_auto() {
+    local val
+    case "${1:-}" in on) val=1 ;; off) val=0 ;; *) echo "usage: johnny update auto on|off" >&2; exit 2 ;; esac
+    set_conf AUTO_UPDATE "$val"
+    state_merge --argjson a "$(bool [ "$val" = 1 ])" '. + {auto: $a}'
+    jq -n --argjson a "$(bool [ "$val" = 1 ])" '{ok: true, auto: $a}'
+}
+
+cmd_channel() {
+    case "${1:-}" in stable|beta) ;; *) echo "usage: johnny update channel stable|beta" >&2; exit 2 ;; esac
+    set_conf UPDATE_CHANNEL "$1"
+    UPDATE_CHANNEL=$1
+    state_merge --arg ch "$1" '. + {channel: $ch}'
+    if sync_mirror; then plan; record_check; else record_unreachable; fi
+    jq -n --arg ch "$1" '{ok: true, channel: $ch}'
+}
+
+cmd_ensure() {
+    lock
+    say "Johnny $(installed): the install steps of $REPO_ROOT"
+    install_tree
+    reload_php_fpm
+    state_merge --arg c "$(installed)" --arg cc "$(installed_commit)" '. + {current: $c, current_commit: $cc}'
+}
+
+# start [--force] — apply as a unit of its own, so the panel's request returns at once
+cmd_start() {
+    local opts=()
+    case "${1:-}" in --force) opts=(--force) ;; "") ;; *) echo "usage: johnny update start [--force]" >&2; exit 2 ;; esac
+    lock_free || { echo "another update is running" >&2; exit 1; }
+    reap
+    state_merge --arg t "$(now)" --argjson fo "$(bool [ ${#opts[@]} -gt 0 ])" \
+        '. + {status: "running", message: "Starting the update…", started_at: $t, finished_at: null, triggered_automatically: false, forced: $fo}'
+    local unit; unit="johnny-update-$(date +%Y%m%d%H%M%S)-$$"
+    systemd-run --unit "$unit" --description "Johnny update" --collect --no-block --quiet /usr/local/bin/johnny update apply "${opts[@]}" \
+        || { settle failed "The update could not be started (systemd-run)."; exit 1; }
+    jq -n --arg u "$unit" '{ok: true, unit: $u}'
+}
+
+cmd_apply() {
+    local auto=0 force=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --auto) auto=1; shift ;;
+            --force) force=1; shift ;;
+            *) echo "unknown option: $1" >&2; exit 2 ;;
+        esac
+    done
+
+    if [ "$auto" = 1 ]; then lock 3600; else lock; fi
+    if ! sync_mirror; then
+        echo "the Johnny repository is not reachable: $JOHNNY_REPO" >&2
+        record_unreachable
+        settle failed "The Johnny repository is not reachable: nothing was changed."
+        exit 1
+    fi
+    plan
+    record_check
+
+    if [ "$auto" = 1 ] && [ "${AUTO_UPDATE:-1}" != 1 ]; then
+        echo "automatic updates are off (AUTO_UPDATE=0)"
+        exit 0
+    fi
+    if [ -z "$TARGET_COMMIT" ]; then echo "$WAITING"; settle up-to-date "$WAITING"; exit 0; fi
+    if [ "$BEHIND" = true ] && [ "$force" = 1 ]; then
+        echo "$TARGET_LABEL is older than the installed $(installed): an update never goes back" >&2
+        settle up-to-date "$WAITING"
+        exit 2
+    fi
+    if [ "$force" = 0 ] && [ "$AVAILABLE" != true ]; then
+        if [ -n "$WAITING" ]; then echo "$WAITING"; else echo "Johnny $(installed) is already the newest build of the $(channel) channel"; fi
+        settle up-to-date "${WAITING:-Already on the newest build.}"
+        exit 0
+    fi
+
+    local from from_commit dirty commit err ref
+    local checked_out=0 migrated=0 down=0
+    from=$(installed); from_commit=$(installed_commit)
+    dirty=$(repo status --porcelain --untracked-files=no 2>/dev/null || true)
+    if [ -n "$dirty" ] && [ "$force" = 0 ]; then
+        echo "the checkout at $REPO_ROOT has local changes to tracked files:" >&2; echo "$dirty" >&2
+        settle failed "The checkout at $REPO_ROOT has local changes: commit or discard them, or Force update discards them."
+        exit 1
+    fi
+
+    start_run_log
+    state_merge --arg f "$from" --arg to "$TARGET_LABEL" --arg t "$(now)" --argjson a "$(bool [ "$auto" = 1 ])" --argjson fo "$(bool [ "$force" = 1 ])" \
+        '. + {status: "running", message: ("Updating " + $f + " → " + $to), target: $to, started_at: $t, finished_at: null, triggered_automatically: $a, forced: $fo}'
+    say "Johnny $from → $TARGET_LABEL ($(channel) channel$([ "$force" = 1 ] && echo ', forced'))"
+    if [ -n "$dirty" ]; then say "discarding the local changes of the checkout (forced):"; echo "$dirty"; fi
+
+    fail() {
+        say "FAILED: $1"
+        if [ "$checked_out" = 1 ] && [ -n "$from_commit" ]; then
+            say "checking $from out again"
+            repo checkout -q --force --detach "$from_commit" || say "COULD NOT CHECK $from OUT AGAIN: git -C $REPO_ROOT checkout --force $from_commit by hand"
+        fi
+        if [ "$migrated" = 1 ] && [ -n "${BACKUP:-}" ]; then
+            say "restoring the panel database from $(basename "$BACKUP")"
+            db_restore "$BACKUP" || say "THE PANEL DATABASE COULD NOT BE RESTORED: restore $BACKUP by hand"
+        fi
+        if [ "$checked_out" = 1 ]; then
+            say "the install steps of $from, again"
+            install_tree || say "the install steps of $from failed: run sudo johnny update ensure"
+            reload_php_fpm
+        fi
+        if [ "$down" = 1 ]; then artisan up || true; fi
+        finish_state failed "$1"
+        exit 1
+    }
+
+    # 1. the build, into the checkout
+    if [ "$TARGET_REF" = main ]; then ref=refs/heads/main; else ref=refs/tags/$TARGET_REF; fi
+    say "fetching $TARGET_REF from $JOHNNY_REPO"
+    err=$(repo fetch -q --no-tags --force "$JOHNNY_REPO" "+$ref:refs/johnny-update/target" 2>&1) || fail "git fetch of $TARGET_REF failed: $err"
+    commit=$(repo rev-parse -q --verify 'refs/johnny-update/target^{commit}' || true)
+    [ -n "$commit" ] || fail "$TARGET_REF was not fetched"
+    if [ "$TARGET_REF" = main ]; then
+        TARGET_COMMIT=$commit; TARGET_LABEL="main-${commit:0:7}"
+    elif [ "$commit" != "$TARGET_COMMIT" ]; then
+        fail "$TARGET_REF moved while updating: check again"
+    fi
+    if is_tag "$TARGET_REF"; then
+        local v; v=$(repo show "$commit:VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+        [ -n "$v" ] && [ "$(tag_version "$v")" = "$(tag_version "$TARGET_REF")" ] \
+            || fail "the VERSION file of $TARGET_REF says ${v:-nothing}, not $(tag_version "$TARGET_REF")"
+    fi
+
+    # 2. the panel database
+    db_backup "$from" "$TARGET_LABEL" || fail "the backup of the panel database failed; nothing was changed"
+
+    # 3. maintenance
+    if panel_installed; then artisan down --retry=15 && down=1 || true; fi
+
+    # 4. the code
+    say "checking out $TARGET_LABEL (${commit:0:12})"
+    checked_out=1
+    repo checkout -q --force --detach "$commit" || fail "git checkout of $TARGET_LABEL failed"
+
+    # 5. its install steps (they migrate the panel's database)
+    migrated=1
+    install_tree || fail "the install steps of $TARGET_LABEL failed"
+
+    # 6. back up, and answering
+    if [ "$down" = 1 ]; then artisan up || true; fi
+    down=0
+    reload_php_fpm
+    healthy || fail "Johnny $TARGET_LABEL did not answer its health check"
+
+    state_merge --arg c "$TARGET_LABEL" --arg cc "$commit" --arg p "$from" --arg pc "$from_commit" --arg b "${BACKUP:-}" \
+        '. + {current: $c, current_commit: $cc, previous: $p, previous_commit: $pc, backup: (if $b == "" then null else $b end), update_available: false, waiting: "", waiting_reason: ""}'
+    prune_backups
+    say "Johnny $TARGET_LABEL is live"
+    if [ "$from" = "$TARGET_LABEL" ]; then finish_state ok "Reinstalled $TARGET_LABEL."; else finish_state ok "Updated $from → $TARGET_LABEL."; fi
+}
+
+# --pull: the command of Johnny before 1.2.0 (an old nightly cron line, a habit): the pending
+# steps of the checkout first (they move the nightly to the new schedule), then an update.
+# From cron it is the nightly update (AUTO_UPDATE decides); typed by hand, an update now.
+cmd_pull() {
+    say "johnny update --pull is johnny update apply since 1.2.0"
+    cmd_ensure
+    if [ -t 0 ]; then cmd_apply; else cmd_apply --auto; fi
+}
+
+# ------------------------------------------------------------------ server --
+# The server itself, kept on the newest version of everything installed: apt full-upgrade,
+# Composer and rclone when they were not installed from apt, the services whose packages
+# changed, and the health check. Its state is .system in the state file.
+
+finish_system() { # finish_system STATUS MESSAGE CHANGES_FILE
+    sleep 0.2
+    state_merge --arg s "$1" --arg m "$2" --arg t "$(now)" --rawfile log "$RUNLOG" --rawfile ch "$3" \
+        --argjson rb "$(bool [ -f "$ROOT/run/reboot-required" ])" --arg rbp "$(cat "$ROOT/run/reboot-required.pkgs" 2>/dev/null || true)" \
+        '.system = ((.system // {}) + {status: $s, message: $m, finished_at: $t, reboot_required: $rb,
+            reboot_packages: ($rbp | split("\n") | map(select(length > 0)) | unique),
+            changes: ($ch | split("\n") | map(select(length > 0))),
+            log: ($log | split("\n") | map(select(length > 0)) | .[-80:])})'
+}
+
+apt_get() {
+    DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -y -q -o DPkg::Lock::Timeout=600 \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+packages() { dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package} ${Version}\n' 2>/dev/null | awk '$1 ~ /^ii/ {print $2, $3}' | LC_ALL=C sort -k1,1; }
+# changed BEFORE AFTER — "package old → new" for every package installed, upgraded or removed
+changed() {
+    LC_ALL=C join -a1 -a2 -e '-' -o '0,1.2,2.2' "$1" "$2" | awk '$2 != $3 {
+        if ($2 == "-") print $1 " (new) " $3; else if ($3 == "-") print $1 " " $2 " (removed)"; else print $1 " " $2 " → " $3 }'
+}
+from_apt() { dpkg -S "$1" >/dev/null 2>&1; }
+
+# tool_update NAME COMMAND… — a tool that updates itself, its version before and after into $CHANGES
+tool_update() {
+    local name=$1 bin before after; shift
+    bin=$(command -v "$name" 2>/dev/null || true)
+    [ -n "$bin" ] || return 0
+    if from_apt "$(readlink -f "$bin")"; then return 0; fi
+    before=$("$bin" --version 2>/dev/null | head -n1 || true)
+    say "$name: $*"
+    "$@" || { say "$name did not update itself"; return 0; }
+    after=$("$bin" --version 2>/dev/null | head -n1 || true)
+    if [ "$before" != "$after" ]; then echo "$name ${before:-?} → ${after:-?}" >> "$CHANGES"; fi
+}
+
+restart_services() { # restart_services all|CHANGES_FILE — PHP-FPM, Caddy, Garage (all, or those whose packages changed)
+    local u
+    if [ "$1" = all ] || grep -qE '^php[0-9.]*-' "$1"; then
+        for u in $(php_fpm_units); do say "restarting $u"; systemctl restart "$u" || say "$u did not restart"; done
+    fi
+    if [ "$1" = all ] || grep -qE '^caddy ' "$1"; then say "restarting caddy"; systemctl restart caddy || say "caddy did not restart"; fi
+    if [ "$1" = all ] || grep -qE '^garage ' "$1"; then say "restarting johnny-garage"; systemctl restart johnny-garage || say "johnny-garage did not restart"; fi
+}
+
+cmd_system() {
+    local auto=0 before after count
+    case "${1:-}" in
+        --auto) auto=1 ;;
+        "") ;;
+        *) echo "usage: johnny update system [--auto]" >&2; exit 2 ;;
+    esac
+    if [ "$auto" = 1 ] && [ "${SYSTEM_UPDATE:-1}" != 1 ]; then
+        echo "automatic server updates are off (SYSTEM_UPDATE=0)"
+        exit 0
+    fi
+    if [ "$auto" = 1 ]; then lock 3600; else lock; fi
+
+    export COMPOSER_ALLOW_SUPERUSER=1
+    CHANGES=$(mktemp); before=$(mktemp); after=$(mktemp)
+    start_run_log
+    state_merge --arg t "$(now)" --argjson a "$(bool [ "$auto" = 1 ])" \
+        '.system = ((.system // {}) + {status: "running", message: "Updating the server", started_at: $t, finished_at: null, triggered_automatically: $a})'
+    say "server update: every package to its newest version"
+
+    packages > "$before"
+    if ! { apt_get update && apt_get full-upgrade && apt_get autoremove; }; then
+        packages > "$after"; changed "$before" "$after" > "$CHANGES"
+        say "FAILED: apt-get stopped before the end"
+        restart_services "$CHANGES"
+        finish_system failed "The server update stopped before the end: see /var/log/johnny-update.log." "$CHANGES"
+        exit 1
+    fi
+    packages > "$after"
+    changed "$before" "$after" > "$CHANGES"
+    tool_update composer composer self-update --no-interaction --quiet
+    tool_update rclone rclone selfupdate
+
+    count=$(grep -c . "$CHANGES" || true)
+    if [ "$count" -gt 0 ]; then
+        say "restarting the services whose packages changed"
+        restart_services "$CHANGES"
+    fi
+    if ! healthy; then
+        say "Johnny does not answer: restarting its services once more"
+        restart_services all
+        healthy || { finish_system failed "Johnny did not answer its health check after the server update." "$CHANGES"; exit 1; }
+    fi
+
+    if [ -f "$ROOT/run/reboot-required" ]; then
+        if [ "$auto" = 1 ] && [ "${SYSTEM_REBOOT:-0}" = 1 ]; then
+            say "a reboot is required (a new kernel or system library): rebooting in 5 minutes (SYSTEM_REBOOT=1)"
+            shutdown -r +5 "Johnny: reboot after the nightly server update" >/dev/null 2>&1 || say "the reboot could not be scheduled"
+        else
+            say "a reboot is required (a new kernel or system library): reboot the server when it suits you"
+        fi
+    fi
+
+    if [ "$count" -gt 0 ]; then
+        say "the server is up to date: $count changed"
+        finish_system ok "Updated $count $([ "$count" = 1 ] && echo package || echo packages)." "$CHANGES"
+    else
+        say "the server was already up to date"
+        finish_system up-to-date "Everything was already on its newest version." "$CHANGES"
+    fi
+    rm -f "$CHANGES" "$before" "$after"
+}
+
+cmd_system_start() {
+    lock_free || { echo "another update is running" >&2; exit 1; }
+    reap
+    state_merge --arg t "$(now)" \
+        '.system = ((.system // {}) + {status: "running", message: "Starting the server update…", started_at: $t, finished_at: null, triggered_automatically: false})'
+    local unit; unit="johnny-system-update-$(date +%Y%m%d%H%M%S)-$$"
+    systemd-run --unit "$unit" --description "Johnny server update" --collect --no-block --quiet /usr/local/bin/johnny update system \
+        || { state_merge --arg t "$(now)" '.system = ((.system // {}) + {status: "failed", message: "The server update could not be started (systemd-run).", finished_at: $t})'; exit 1; }
+    jq -n --arg u "$unit" '{ok: true, unit: $u}'
+}
+
+cmd_system_auto() {
+    local val
+    case "${1:-}" in on) val=1 ;; off) val=0 ;; *) echo "usage: johnny update system-auto on|off" >&2; exit 2 ;; esac
+    set_conf SYSTEM_UPDATE "$val"
+    state_merge --argjson a "$(bool [ "$val" = 1 ])" '.system = ((.system // {}) + {auto: $a})'
+    jq -n --argjson a "$(bool [ "$val" = 1 ])" '{ok: true, auto: $a}'
+}
+
+main() {
+    local cmd=${1:-ensure}; shift || true
+    case "$cmd" in
+        check|apply|start|channel|auto|status|ensure|system|system-start|system-auto|--pull) ;;
+        *) sed -n '3,31p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    esac
+    if [ "$cmd" != status ]; then need jq jq; need git git; need curl curl; fi
+    conf_init
+    load_conf
+    case "$cmd" in
+        check) cmd_check ;;
+        status) if command -v jq >/dev/null 2>&1; then reap || true; fi; cmd_status ;;
+        apply) cmd_apply "$@" ;;
+        start) cmd_start "$@" ;;
+        channel) cmd_channel "$@" ;;
+        auto) cmd_auto "$@" ;;
+        ensure) cmd_ensure ;;
+        system) cmd_system "$@" ;;
+        system-start) cmd_system_start ;;
+        system-auto) cmd_system_auto "$@" ;;
+        --pull) cmd_pull ;;
+    esac
+}
+
+# On one line: an update replaces this very file while it runs, and bash reads a script as it goes.
+main "$@"; exit $?
