@@ -985,7 +985,7 @@
         <div class="coverage-row">
           <span class="n">06</span>
           <span class="name">Self-updating</span>
-          <span class="desc">Stable releases or beta (main), nightly or from the panel, with a database backup and rollback. Server packages too.</span>
+          <span class="desc">Nightly cron installs the latest release, runs migrations, and refreshes the panel.</span>
           <span class="tag">Ops</span>
         </div>
         <div class="coverage-row">
@@ -1303,6 +1303,10 @@
                   <td>Update every package of the server</td>
                 </tr>
                 <tr>
+                  <td><code>johnny update ensure</code></td>
+                  <td>Re-run the install steps of the installed build</td>
+                </tr>
+                <tr>
                   <td><code>johnny bucket list|create</code></td>
                   <td>List or create buckets</td>
                 </tr>
@@ -1478,27 +1482,41 @@
           <h3>Updates</h3>
           <p>
             Johnny updates itself in place, in the git checkout named by <code>/etc/johnny/repo.path</code>:
-            from the panel's <strong>Updates</strong> page, every night, or by hand.
+            every night, from the panel's <strong>Updates</strong> page, or by hand.
           </p>
           <div class="code-block">
             <div class="code-header">
               <span>bash</span>
-              <button class="copy-btn" type="button" data-copy="sudo johnny update check">Copy</button>
+              <button class="copy-btn" type="button" data-copy="sudo johnny update check&#10;sudo johnny update apply">Copy</button>
             </div>
-            <pre><span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">check</span>    <span class="tok-cmt"># what the channel would install</span>
-<span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">apply</span>    <span class="tok-cmt"># install it now</span>
-<span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">channel beta</span></pre>
+            <pre><span class="tok-cmt"># check, then install</span>
+<span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">check</span>
+<span class="tok-cmd">sudo johnny update</span> <span class="tok-flag">apply</span></pre>
           </div>
           <ul>
             <li><strong>stable</strong> (default) installs the newest release tag (<code>X.Y.Z</code>; <code>vX.Y.Z</code> and <code>X.Y</code> are read too);
-              <strong>beta</strong> follows the head of <code>main</code>. A build is installed only when it contains the installed commit: never backwards.</li>
+              <strong>beta</strong> follows the head of <code>main</code> (<code>sudo johnny update channel beta</code>).
+              A build is installed only when it contains the installed commit: never backwards.</li>
             <li>Each update backs up the panel database (SQLite, MySQL/MariaDB, PostgreSQL) to <code>/var/backups/johnny</code>,
               checks the build out, runs its install steps (scripts, Composer, migrations, caches) and a health check;
-              a failure puts the previous commit and the database back.</li>
+              a failure puts the previous commit and the database back. <code>apply --force</code> reinstalls the newest build.</li>
+            <li>Server update (<code>sudo johnny update system</code>): <code>apt-get full-upgrade</code> keeping your config files,
+              Composer and rclone when not installed from apt, a restart of PHP-FPM or Caddy only when their packages changed,
+              and the health check. It never reboots unless <code>SYSTEM_REBOOT=1</code>, and then only at night.</li>
             <li>Nightly: server packages at 02:00 (<code>johnny update system --auto</code>), Johnny at 02:30
-              (<code>johnny update apply --auto</code>), backup at 03:00. Switches live in <code>/etc/johnny/update.env</code>.</li>
-            <li>From 1.1.x the old <code>johnny update --pull</code> line keeps working and moves the server to this schedule.</li>
+              (<code>johnny update apply --auto</code>), backup at 03:00. Switches (<code>UPDATE_CHANNEL</code>, <code>AUTO_UPDATE</code>,
+              <code>SYSTEM_UPDATE</code>, <code>SYSTEM_REBOOT</code>) live in <code>/etc/johnny/update.env</code>;
+              <code>sudo johnny update auto off</code> and <code>system-auto off</code> turn the nightly runs off.</li>
+            <li>The panel's Updates page (arrow icon in the header) does the same: check, update, force, channel, nightly switches,
+              the server update and a reboot notice, with the log followed live. Every panel user is an administrator and can use it;
+              it runs only the exact <code>johnny update …</code> lines allowed in <code>/etc/sudoers.d/johnny-panel</code>.</li>
           </ul>
+          <div class="callout">
+            From 1.1.x there is nothing to do: the old nightly <code>johnny update --pull</code> pulls <code>main</code> one last time,
+            and migration <code>008</code> moves the server to this schedule, writes <code>update.env</code> (stable, nightly Johnny and
+            server updates on) and adds the update lines to the panel's sudoers file. To move over at once:
+            <code>sudo johnny update --pull</code>.
+          </div>
           <p style="margin-top:0.85rem">Log: <code>/var/log/johnny-update.log</code>.</p>
         </article>
 
@@ -1511,6 +1529,8 @@
             <li>Firewall: expose <strong>443</strong> (and <strong>80</strong> for ACME); restrict <strong>22</strong>
               to trusted IPs</li>
             <li><code>rclone sync</code> can delete extras under each dated prefix — review the rclone sync docs</li>
+            <li>Every panel user is an administrator and can start updates; the panel may run as root only the exact
+              <code>johnny update …</code> lines in <code>/etc/sudoers.d/johnny-panel</code></li>
           </ul>
         </article>
 
@@ -1551,7 +1571,23 @@
                 </tr>
                 <tr>
                   <td><code>/etc/cron.d/johnny-nightly</code></td>
-                  <td>Update + backup schedule</td>
+                  <td>Server update 02:00, Johnny 02:30, backup 03:00</td>
+                </tr>
+                <tr>
+                  <td><code>/etc/sudoers.d/johnny-panel</code></td>
+                  <td>What the panel may run: Garage CLI as <code>johnny</code>, update commands as root</td>
+                </tr>
+                <tr>
+                  <td><code>/var/lib/johnny-update/state.json</code></td>
+                  <td>Last check and last runs, read by the panel</td>
+                </tr>
+                <tr>
+                  <td><code>/var/backups/johnny/</code></td>
+                  <td>Panel database backups taken before each update (newest 5)</td>
+                </tr>
+                <tr>
+                  <td><code>/var/log/johnny-update.log</code></td>
+                  <td>Update log (Johnny and server)</td>
                 </tr>
                 <tr>
                   <td><code>panel/.env</code></td>
@@ -1585,6 +1621,11 @@
                 <tr>
                   <td><code>JOHNNY_CLI_BINARY</code> / <code>JOHNNY_CLI_SUDO_USER</code></td>
                   <td>How the panel calls the CLI (default <code>sudo -n -u johnny /usr/local/bin/johnny</code>)</td>
+                </tr>
+                <tr>
+                  <td><code>JOHNNY_UPDATE_STATE</code> / <code>JOHNNY_UPDATE_SUDO</code></td>
+                  <td>Updater state read by the Updates page (default <code>/var/lib/johnny-update/state.json</code>);
+                    run <code>johnny update …</code> through <code>sudo -n</code> (default <code>true</code>)</td>
                 </tr>
                 <tr>
                   <td><code>APP_TIMEZONE</code></td>

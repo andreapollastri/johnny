@@ -22,7 +22,7 @@ Johnny wraps [Garage](https://garagehq.deuxfleurs.fr/) with production-ready aut
 | **Web panel** | Storage dashboard, file browser (folders, multi-upload, pagination), access keys and per-bucket permissions (optional) |
 | **Provisioning API** | Authenticated HTTP endpoint to create a bucket, a dedicated Garage key, and return S3 connection details (optional panel) |
 | **Two-factor auth** | TOTP 2FA + password reset via SMTP on the web panel |
-| **Self-updating** | Stable releases or the `main` branch (beta), installed every night or from the panel's Updates page — with a database backup and automatic rollback; the server's packages too |
+| **Self-updating** | Nightly cron installs the latest release, runs migrations, and refreshes the panel |
 | **Local demo** | `bash demo/up.sh` boots Garage, seeds sample data and serves the panel on your laptop |
 
 ---
@@ -115,7 +115,7 @@ The optional Laravel panel provides a browser-based interface to manage **bucket
 | ![Settings](docs/img/settings.jpg) | ![Dark mode](docs/img/dashboard-dark.jpg) |
 | **Settings** — TOTP 2FA and Sanctum API tokens | **Dark mode** — follows the system or the header toggle |
 
-**Updates** (the arrow icon in the header, with a dot when an update is available): the installed version, the newest build of the channel with a link to its release, the stable/beta switch, automatic updates, *Check now*, *Update*, *Force update*, the last run and its log (followed live while it runs), and a **Server** card for the nightly package update and pending reboots — see [Updating](#updating). Every panel user is an administrator, so every user sees it.
+The **Updates** page (arrow icon in the header) shows the installed version and lets you check, start and configure updates of Johnny and of the server's packages — see [Updating](#updating). The panel has no roles: every signed-in user is an administrator and can use it.
 
 ### Install the Panel
 
@@ -142,7 +142,9 @@ Besides the Laravel defaults, `panel/.env` supports:
 | `JOHNNY_CLI_BINARY` | `/usr/local/bin/johnny` | CLI used for buckets, keys and permissions |
 | `JOHNNY_CLI_SUDO_USER` | `johnny` | Run the CLI as this user via `sudo -n`; empty to call it directly |
 | `JOHNNY_UPDATE_STATE` | `/var/lib/johnny-update/state.json` | State of the updater, read by the **Updates** page |
-| `JOHNNY_UPDATE_SUDO` | `true` | Run `johnny update …` through `sudo -n` (as root) |
+| `JOHNNY_UPDATE_SUDO` | `true` | Run `johnny update …` through `sudo -n` (as root); `false` calls it directly |
+| `JOHNNY_VERSION_FILE` | `../VERSION` | Version shown as *Installed* on the **Updates** page |
+| `JOHNNY_REPOSITORY_URL` | `https://github.com/andreapollastri/johnny` | Release and commit links when the updater has not recorded its repository yet |
 | `APP_TIMEZONE` | `UTC` | Timezone for dates shown in the panel |
 
 Dashboard statistics require listing every object, so they are cached for 60 seconds; use **Refresh** on the dashboard to recompute them.
@@ -157,9 +159,15 @@ Open `https://<panel-hostname>` and sign in. Open **Settings** (gear in the head
 
 ### API Keys via the Panel
 
-The Keys page calls `sudo -u johnny johnny key list` under the hood. The sudoers rule is installed automatically during autoinstall; for manual installs, copy the example:
+The Keys page calls `sudo -u johnny johnny key list` under the hood. `/etc/sudoers.d/johnny-panel` lets the PHP-FPM user (`www-data`) run:
+
+- the Garage CLI as `johnny` (buckets, keys, permissions)
+- as root, only these exact command lines, for the **Updates** page (no wildcards: sudo matches the arguments as written): `johnny update status`, `check`, `start`, `start --force`, `channel stable`, `channel beta`, `auto on`, `auto off`, `system-start`, `system-auto on`, `system-auto off`
+
+`scripts/install-panel.sh` (run by autoinstall) installs it; on a 1.1.x server, migration `008` adds the update lines to the existing file. For manual installs, copy the example (change `www-data` if PHP-FPM runs as another user):
 
 ```bash
+sudo visudo -cf config/johnny-panel.sudoers.example
 sudo install -m 0440 config/johnny-panel.sudoers.example /etc/sudoers.d/johnny-panel
 ```
 
@@ -325,7 +333,9 @@ sudo johnny update status    # the last check and the last run (JSON)
 - `stable` (the default) — the newest release tag. Releases are tagged `X.Y.Z`; `vX.Y.Z` and `X.Y` tags are read too, and a tag is installed only when its `VERSION` file says the same version.
 - `beta` — the head of the `main` branch, for a server you test on.
 
-An update **never goes backwards**: a build is installed only when it contains the installed commit. Back on stable after beta, Johnny keeps its `main` build until a release contains it. When nothing moves, `check` and the Updates page say why: no release yet, the installed build is newer (`behind`), the history differs (`diverged`), or the repository is not reachable.
+Switch with `sudo johnny update channel stable|beta` or on the Updates page. Builds come from `JOHNNY_REPO` in the same file: the checkout's `origin` when it is an `https://`, `ssh://` or `git@` URL, otherwise `https://github.com/andreapollastri/johnny.git`.
+
+An update **never goes backwards**: a build is installed only when it contains the installed commit. Back on stable after beta, Johnny keeps its `main` build until a release contains it — and so does a fresh `git clone`, which runs the head of `main`. When nothing moves, `check` and the Updates page say why: no release yet, the installed build is newer (`behind`), the history differs (`diverged`), or the repository is not reachable.
 
 One update, in order:
 
@@ -333,9 +343,9 @@ One update, in order:
 2. Back up the panel database — SQLite, MySQL/MariaDB or PostgreSQL, from `panel/.env` — into `/var/backups/johnny` (the newest 5 are kept)
 3. Panel in maintenance mode, `git checkout --force --detach <build>`
 4. The build's install steps (`scripts/update.sh`): scripts to `/usr/local/share/johnny`, panel `composer install` + `artisan migrate` + caches, pending numbered migrations from `scripts/migrations/`, system keys on every bucket
-5. Maintenance off, PHP-FPM reloaded, health check (`garage status`, and the panel answering `/up`)
+5. Maintenance off, PHP-FPM reloaded, health check (`garage status`; the panel boots and, when this server's Caddy serves it, answers `/up`)
 
-If a step after the checkout fails, the previous commit is checked out again, the panel database is restored from the backup, and its install steps run again.
+If a step after the checkout fails (the health check included), the previous commit is checked out again, the panel database is restored from the backup, and its install steps run again. A failure before the checkout (the repository not reachable, a tag whose `VERSION` does not match, the backup) changes nothing. One run at a time: the nightly runs wait for each other, and the panel's buttons are disabled while one is under way.
 
 **Force update** (`sudo johnny update apply --force`, or the button in the panel) installs the channel's newest build again even when it is the installed one, and also when the history differs; it discards local changes to tracked files. It never installs an older build.
 
@@ -347,9 +357,31 @@ If a step after the checkout fails, the previous commit is checked out again, th
 | 02:30 | `johnny update apply --auto` — the newest build of the channel | `sudo johnny update auto on\|off` (`AUTO_UPDATE`) |
 | 03:00 | SFTP backup | — |
 
-A server update that needs a reboot (`/run/reboot-required`) says so on the Updates page; set `SYSTEM_REBOOT=1` in `/etc/johnny/update.env` to reboot 5 minutes after a nightly run that needs it.
+With a switch off, the nightly line still runs: `apply --auto` only checks (the Updates page stays current), `system --auto` does nothing. *Update* and *Update the server now* on the panel, and `apply` / `system` by hand, run whatever the switches say.
 
-**From 1.1.x:** the old nightly line `johnny update --pull` keeps working. Its last run pulls `main` (1.2.0 or later), whose migration `008` moves the cron file to the schedule above, installs `jq`, writes `/etc/johnny/update.env` (stable channel, automatic updates on) and adds the update commands to `/etc/sudoers.d/johnny-panel`. From then on `johnny update --pull` re-runs the install steps of the checkout and then updates like `johnny update apply` (from cron, like the nightly `apply --auto`), and `johnny update` alone re-runs the install steps of the checkout (`ensure`). A server with commits of `main` newer than the latest release stays on them (`behind`) until the next release contains them.
+**Server update** (`sudo johnny update system`, *Update the server now* on the panel, or nightly at 02:00): `apt-get update`, `full-upgrade` and `autoremove` — Ubuntu and its security fixes, PHP, Caddy, rclone — keeping your changed configuration files; then `composer self-update` and `rclone selfupdate` when they were not installed from apt; then PHP-FPM, Caddy and `johnny-garage` restart only if their packages changed, and the health check runs (with one more restart of all three if Johnny does not answer). The Updates page lists what changed. Garage itself is a binary installed by `scripts/install.sh` (`GARAGE_VERSION`), not an apt package: neither update changes its version. A server update that needs a reboot (`/run/reboot-required`) says so on the Updates page with the packages that need it; Johnny never reboots on its own unless you set `SYSTEM_REBOOT=1` in `/etc/johnny/update.env`, and then only after a nightly run that needs it, 5 minutes later.
+
+`/etc/johnny/update.env` (written with these defaults on the first run; `channel`, `auto` and `system-auto` edit it, `SYSTEM_REBOOT` and `JOHNNY_REPO` are edited by hand):
+
+```dotenv
+UPDATE_CHANNEL=stable   # or beta
+AUTO_UPDATE=1           # Johnny, nightly at 02:30
+SYSTEM_UPDATE=1         # server packages, nightly at 02:00
+SYSTEM_REBOOT=0         # 1: reboot 5 minutes after a nightly server update that needs it
+JOHNNY_REPO=https://github.com/andreapollastri/johnny.git
+```
+
+**From 1.1.x — nothing to do.** Existing servers move over on their own on the next nightly run: the old line `johnny update --pull` (02:30) pulls `main` one last time, and its install steps run the new migration `008`, which:
+
+- moves `/etc/cron.d/johnny-nightly` to the schedule above (server update at 02:00, Johnny update at 02:30)
+- installs `jq` and creates `/var/lib/johnny-update`
+- writes `/etc/johnny/update.env` with the defaults: stable channel, automatic updates **and nightly server updates on** (`sudo johnny update system-auto off` if you would rather update packages yourself)
+- adds the update commands to `/etc/sudoers.d/johnny-panel` (for the PHP-FPM user already named there), so the panel's Updates page works
+- runs a first check, so the Updates page has something to show
+
+From the following night, the server follows the stable channel and updates its packages. To move over at once, run the same command by hand: `sudo johnny update --pull`. On a server set up without autoinstall (no `/etc/cron.d/johnny-nightly`), `008` adds no schedule: add the two `johnny update` lines yourself.
+
+The pull lands on the head of `main`: when that is the `1.2.0` tag, the server runs `1.2.0`; when `main` has newer commits, the server stays on them (`behind`) until the next release contains them. After 1.2.0, `johnny update --pull` still works — it re-runs the install steps of the checkout, then updates like `apply` (from cron, like the nightly `apply --auto`) — and `johnny update` alone re-runs the install steps (`ensure`).
 
 Check the installed version:
 
@@ -373,11 +405,11 @@ sudo johnny status           # Garage cluster status
 | Command | Description |
 |---|---|
 | `sudo johnny update check` | What the channel would install, as JSON (also records it for the panel) |
-| `sudo johnny update apply [--force]` | Install the newest build of the channel (`--force`: again, even when installed) |
+| `sudo johnny update apply [--force]` | Install the newest build of the channel (`--force`: again, even when installed; `--auto`: what the nightly runs, a check only while `AUTO_UPDATE=0`) |
 | `sudo johnny update status` | The last check and the last run, as JSON |
 | `sudo johnny update channel stable\|beta` | Follow the release tags, or the head of `main` |
 | `sudo johnny update auto on\|off` | The nightly Johnny update (02:30) |
-| `sudo johnny update system` | Update every package of the server now |
+| `sudo johnny update system` | Update every package of the server now (`--auto`: what the nightly runs, nothing while `SYSTEM_UPDATE=0`) |
 | `sudo johnny update system-auto on\|off` | The nightly server update (02:00) |
 | `sudo johnny update ensure` | Re-run the install steps of the checked-out build (also: `sudo johnny update`) |
 | `sudo johnny update start [--force]` / `system-start` | `apply` / `system` detached through `systemd-run` (what the panel runs) |
@@ -450,6 +482,7 @@ sudo bash scripts/replicate-run.sh config/replication/media-to-eu.env
 - Prefer **SSH keys** on backup servers for production use; Johnny documents password auth for simplicity
 - Firewall: expose **443** (and **80** for ACME) only; restrict **22** to trusted IPs where possible
 - `rclone sync` can delete extra files on the destination under each dated prefix — see the [rclone sync docs](https://rclone.org/commands/rclone_sync/)
+- Every panel user is an administrator and can start updates from the **Updates** page; the PHP-FPM user may run as root only the exact `johnny update …` lines in `/etc/sudoers.d/johnny-panel`
 
 ---
 
@@ -462,11 +495,11 @@ sudo bash scripts/replicate-run.sh config/replication/media-to-eu.env
 | `/etc/johnny/credentials/default-s3.env` | App S3 credentials |
 | `/etc/johnny/credentials/backup-internal-s3.env` | Internal backup S3 credentials |
 | `/etc/johnny/repo.path` | Path to the Johnny repo (for updates) |
-| `/etc/johnny/update.env` | Updates: `UPDATE_CHANNEL` (`stable`/`beta`), `AUTO_UPDATE`, `SYSTEM_UPDATE`, `SYSTEM_REBOOT`, `JOHNNY_REPO` |
+| `/etc/johnny/update.env` | Updates: `UPDATE_CHANNEL` (`stable`/`beta`), `AUTO_UPDATE`, `SYSTEM_UPDATE`, `SYSTEM_REBOOT`, `JOHNNY_REPO` (see [Updating](#updating)) |
 | `/etc/johnny/migrations.state` | Last applied migration number |
 | `/var/lib/johnny-update/state.json` | Last check and last run of the updater (read by the panel) |
 | `/var/backups/johnny/` | Panel database backups taken before each update (newest 5) |
-| `/var/log/johnny-update.log` | Update log |
+| `/var/log/johnny-update.log` | Update log (Johnny and server updates) |
 | `/etc/cron.d/johnny-nightly` | Cron schedule (server update 02:00, Johnny update 02:30, backup 03:00) |
 | `/etc/sudoers.d/johnny-panel` | What the panel may run: the Garage CLI as `johnny`, the update commands as root |
 | `panel/.env` | Laravel panel environment (see [Panel Environment](#panel-environment)) |
