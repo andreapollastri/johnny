@@ -46,6 +46,8 @@ A new panel: a new look, data that moves in and out of Johnny, keys with scopes,
 
 - **PHP 8.6.** New servers get PHP 8.6. Migration `010` moves existing servers from 8.5 with `scripts/switch-php.sh`: same extensions, FPM pools carried over, the panel checked on 8.6 before Caddy and `php` are switched; the 8.5 packages stay. On any problem the server stays on PHP 8.5, still supported. CI runs on 8.5 and 8.6.
 
+- **Dependencies** refreshed within their constraints: Laravel 13.43, Symfony 8.1.11 (security fixes in http-foundation, http-kernel, routing, serializer, mime, filesystem), nette for PHP 8.6. `composer audit` is clean.
+
 ### Upgrading from 1.2.x
 
 Nothing to do: the nightly update (or *Update* on the Updates page) migrates the panel's database and runs migrations `009` (scheduler) and `010` (PHP 8.6). Existing buckets, keys and permissions are not touched.
