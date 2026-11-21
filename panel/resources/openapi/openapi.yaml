@@ -2,12 +2,28 @@ openapi: 3.0.3
 info:
   title: Johnny Panel API
   description: |
-    JSON API for Garage buckets and keys. All endpoints except documentation require a **Laravel Sanctum** personal access token.
+    JSON API of the Johnny panel: buckets and their settings, access keys and scopes, connections to
+    other S3 providers and SFTP servers, transfers and scheduled syncs. Objects themselves are read and written with
+    the S3 API of the storage endpoint, using an access key.
 
-    Create tokens in the panel under **Settings → Panel API tokens**, or with `php artisan johnny:api-token user@example.com`.
+    All endpoints except this documentation require a **Laravel Sanctum** personal access token.
+    Create one in the panel under **Settings → Panel API tokens**, or with
+    `php artisan johnny:api-token user@example.com`.
 
     Send `Authorization: Bearer <token>` and `Accept: application/json` on every request.
-  version: 1.1.0
+
+    **Conventions**
+
+    - Reads answer `{"data": …}`; errors answer `{"message": "…", "detail": "…"}`.
+    - `422` is a validation error (`errors` lists the fields), `409` means the resource is busy
+      (a transfer still running, a connection in use), `404` an unknown bucket, key or id.
+    - Sizes are bytes, intervals are minutes, dates are ISO 8601.
+
+    **Scopes**
+
+    A key gets one scope per bucket: `read`, `read-write`, `write` or `full`. Garage enforces read,
+    write and owner and nothing finer: a key that can write can also overwrite and delete.
+  version: 2.0.0
 
 servers:
   - url: /
@@ -18,10 +34,18 @@ tags:
     description: One-shot bucket + dedicated S3 key (automation / tenants)
   - name: Buckets
     description: List, create, inspect, delete buckets
+  - name: Bucket settings
+    description: Quotas, CORS and expiry rules of a bucket
   - name: Keys
-    description: List, create, inspect, delete Garage keys
+    description: Access keys, their scopes, and keys that reach all buckets
   - name: Bucket keys
-    description: Grant or revoke key permissions on a bucket
+    description: Grant or revoke a key on one bucket
+  - name: Connections
+    description: Accounts at other S3 providers and SFTP servers, used by transfers and syncs
+  - name: Transfers
+    description: One-off imports and exports, run by rclone in the background
+  - name: Syncs
+    description: Transfers that repeat on an interval, from every minute up
 
 components:
   securitySchemes:
@@ -30,6 +54,74 @@ components:
       scheme: bearer
       bearerFormat: Sanctum
       description: Personal access token from the panel
+
+  parameters:
+    Bucket:
+      name: bucket
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+    KeyId:
+      name: keyId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^GK[0-9a-fA-F]+$'
+    Connection:
+      name: connection
+      in: path
+      required: true
+      schema:
+        type: integer
+    Transfer:
+      name: transfer
+      in: path
+      required: true
+      schema:
+        type: integer
+    Sync:
+      name: sync
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+    Forbidden:
+      description: Not allowed (system keys and the protected bucket are managed by Johnny)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+    Conflict:
+      description: The resource is busy or in use
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+    ValidationError:
+      description: Validation error, or the storage engine refused the request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    UpstreamError:
+      description: Garage or the other provider did not answer as expected
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
 
   schemas:
     ErrorMessage:
@@ -40,6 +132,46 @@ components:
         detail:
           type: string
           nullable: true
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+        detail:
+          type: string
+          nullable: true
+        errors:
+          type: object
+          description: Present on field validation errors
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    Scope:
+      type: string
+      enum: [read, read-write, write, full]
+      description: |
+        `read` lists and downloads; `read-write` also uploads, overwrites and deletes; `write` does
+        that without reading back; `full` adds the bucket settings and deleting the bucket.
+
+    ScopeInfo:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Scope'
+        label:
+          type: string
+          example: Read only
+        summary:
+          type: string
+        read:
+          type: boolean
+        write:
+          type: boolean
+        owner:
+          type: boolean
 
     BucketListItem:
       type: object
@@ -59,6 +191,171 @@ components:
           type: string
           pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
 
+    BucketKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        permissions:
+          type: string
+          example: read, write
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/Scope'
+          nullable: true
+          description: Null when the permissions match no scope (for example read + owner)
+
+    Bucket:
+      type: object
+      properties:
+        name:
+          type: string
+        created:
+          type: string
+          nullable: true
+        size:
+          type: integer
+          nullable: true
+          description: Bytes stored, from Garage's counters
+        objects:
+          type: integer
+          nullable: true
+        quotas:
+          $ref: '#/components/schemas/Quotas'
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/BucketKey'
+        info_raw:
+          type: string
+          nullable: true
+          description: Raw `garage bucket info` output
+
+    Quotas:
+      type: object
+      required: [max_size, max_objects]
+      properties:
+        max_size:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Bytes; null means no limit
+          example: 10737418240
+        max_objects:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Null means no limit
+
+    Cors:
+      type: object
+      properties:
+        origins:
+          type: array
+          items:
+            type: string
+          example: ['https://app.example.com']
+        methods:
+          type: array
+          items:
+            type: string
+            enum: [GET, HEAD, PUT, POST, DELETE]
+        headers:
+          type: array
+          items:
+            type: string
+        max_age:
+          type: integer
+          description: Seconds a browser may cache the preflight answer
+        rules:
+          type: integer
+          description: How many CORS rules the bucket has (other tools may have written more than one)
+
+    CorsRequest:
+      type: object
+      required: [origins]
+      properties:
+        origins:
+          type: array
+          description: '`https://host` without a path, or `*`. An empty list removes the rule.'
+          items:
+            type: string
+        methods:
+          type: array
+          description: Required when origins is not empty
+          items:
+            type: string
+            enum: [GET, HEAD, PUT, POST, DELETE]
+        headers:
+          type: array
+          description: Request headers browsers may send; defaults to every header (`*`)
+          items:
+            type: string
+        max_age:
+          type: integer
+          minimum: 0
+          maximum: 86400
+          default: 3600
+
+    Lifecycle:
+      type: object
+      properties:
+        expire_days:
+          type: integer
+          nullable: true
+          description: Objects are deleted this many days after their upload
+        expire_prefix:
+          type: string
+          description: Only objects under this folder expire; empty is the whole bucket
+        abort_days:
+          type: integer
+          nullable: true
+          description: Unfinished multipart uploads are removed after this many days
+        other_rules:
+          type: integer
+          description: Rules written by other tools, kept as they are
+
+    LifecycleRequest:
+      type: object
+      required: [expire_days, abort_days]
+      properties:
+        expire_days:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 36500
+        expire_prefix:
+          type: string
+          nullable: true
+        abort_days:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 365
+
+    BucketSettings:
+      type: object
+      properties:
+        bucket:
+          type: string
+        usage:
+          type: object
+          properties:
+            size:
+              type: integer
+              nullable: true
+            objects:
+              type: integer
+              nullable: true
+        quotas:
+          $ref: '#/components/schemas/Quotas'
+        cors:
+          $ref: '#/components/schemas/Cors'
+        lifecycle:
+          $ref: '#/components/schemas/Lifecycle'
+
     KeyListItem:
       type: object
       properties:
@@ -73,6 +370,38 @@ components:
           nullable: true
           description: Creation date reported by Garage 2.x (null on older releases)
           example: '2026-10-07'
+        all_buckets:
+          type: boolean
+          description: Whether the key reaches every bucket, new ones included
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/Scope'
+          nullable: true
+          description: The scope on all buckets; null when the key is granted bucket by bucket
+
+    KeyGrant:
+      type: object
+      properties:
+        bucket:
+          type: string
+        permissions:
+          type: string
+          example: read, write
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/Scope'
+          nullable: true
+
+    Key:
+      allOf:
+        - $ref: '#/components/schemas/KeyListItem'
+        - type: object
+          properties:
+            buckets:
+              type: array
+              description: The buckets the key can use
+              items:
+                $ref: '#/components/schemas/KeyGrant'
 
     KeyCreateRequest:
       type: object
@@ -82,6 +411,59 @@ components:
           type: string
           maxLength: 128
           pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]*$'
+        access:
+          type: string
+          enum: [none, all, buckets]
+          default: none
+          description: |
+            Where the key works: nowhere yet (`none`), on every bucket including the ones created
+            later (`all`), or on the buckets listed in `buckets`.
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/Scope'
+          default: read-write
+        buckets:
+          type: array
+          description: Required when access is `buckets`; every name must exist
+          items:
+            type: string
+
+    KeyCreated:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        access:
+          type: string
+          enum: [none, all, buckets]
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/Scope'
+          nullable: true
+        buckets:
+          type: array
+          items:
+            type: string
+        failed_buckets:
+          type: array
+          description: Buckets where the grant failed; grant them again with the bucket keys endpoint
+          items:
+            type: string
+        credentials:
+          $ref: '#/components/schemas/Credentials'
+        raw_output:
+          type: string
+
+    Credentials:
+      type: object
+      description: Shown once. The panel never returns the secret again.
+      properties:
+        access_key_id:
+          type: string
+        secret_access_key:
+          type: string
 
     ProvisionRequest:
       type: object
@@ -91,6 +473,11 @@ components:
           nullable: true
           pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
           description: Optional; if omitted a random name is generated (prefix `b-`)
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/Scope'
+          default: full
+          description: What the dedicated key may do in its bucket
 
     BucketKeyGrantRequest:
       type: object
@@ -99,13 +486,17 @@ components:
         key_id:
           type: string
           description: Garage key id (GK…)
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/Scope'
+          description: Exact access; grants its permissions and revokes the others
         read:
           type: boolean
         write:
           type: boolean
         owner:
           type: boolean
-      description: At least one of read, write, owner must be true
+      description: Pass `scope`, or at least one of read, write, owner (added to what the key already has)
 
     BucketKeyRevokeRequest:
       type: object
@@ -118,6 +509,339 @@ components:
           type: boolean
       description: At least one must be true. Can be sent as JSON body or query string on DELETE.
 
+    Provider:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [aws, r2, spaces, b2, wasabi, hetzner, scaleway, minio, johnny, other, sftp]
+        label:
+          type: string
+          example: Cloudflare R2
+        needs_endpoint:
+          type: boolean
+        endpoint_example:
+          type: string
+        default_region:
+          type: string
+        path_style:
+          type: boolean
+
+    Connection:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        provider:
+          type: string
+        provider_label:
+          type: string
+        endpoint:
+          type: string
+          nullable: true
+          description: The S3 endpoint, or `sftp://host:port` for an SFTP server
+        region:
+          type: string
+          nullable: true
+        path_style:
+          type: boolean
+        access_key_id:
+          type: string
+          description: Masked; for an SFTP server, the user name. Secrets are never returned.
+          example: DO00…WXYZ
+        host_key_pinned:
+          type: boolean
+          nullable: true
+          description: SFTP only; whether the server's host key was remembered (null for S3 accounts)
+        reachable:
+          type: boolean
+          nullable: true
+          description: Result of the last check; null before the first one
+        check_error:
+          type: string
+          nullable: true
+        checked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ConnectionRequest:
+      type: object
+      required: [name, provider]
+      description: |
+        An S3 account needs `access_key_id` and `secret_access_key` (plus `endpoint` for every
+        provider except `aws`). An SFTP server (`provider: sftp`) needs `host`, `username` and
+        either `password` or `private_key`.
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          description: Unique; letters, digits, spaces, dots, dashes and underscores
+        provider:
+          type: string
+          enum: [aws, r2, spaces, b2, wasabi, hetzner, scaleway, minio, johnny, other, sftp]
+        endpoint:
+          type: string
+          format: uri
+          nullable: true
+          description: Required for every provider except `aws`
+        region:
+          type: string
+          nullable: true
+        access_key_id:
+          type: string
+        secret_access_key:
+          type: string
+          description: Required on create. On update, leave it out to keep the stored one.
+        path_style:
+          type: boolean
+          default: false
+        host:
+          type: string
+          description: SFTP only; host name or IP address, without scheme or path
+        port:
+          type: integer
+          default: 22
+          description: SFTP only
+        username:
+          type: string
+          description: SFTP only
+        password:
+          type: string
+          description: SFTP only; on update, leave it out to keep the stored secret
+        private_key:
+          type: string
+          description: SFTP only; a PEM or OpenSSH private key without a passphrase, instead of a password
+
+    TransferRequest:
+      type: object
+      required: [direction, connection_id, remote_bucket, local_bucket, mode]
+      properties:
+        direction:
+          type: string
+          enum: [import, export]
+          description: '`import` copies from the other provider into Johnny, `export` the other way'
+        connection_id:
+          type: integer
+        remote_bucket:
+          type: string
+          description: The bucket at the other provider, or a folder of the SFTP server (`backups/media`, `/srv/backups`)
+        local_bucket:
+          type: string
+          description: The bucket on Johnny. An import creates it when missing; an export needs it to exist.
+        prefix:
+          type: string
+          nullable: true
+          description: Only this folder, for example `uploads/2026/`
+        mode:
+          type: string
+          enum: [copy, sync]
+          description: '`copy` adds new and changed files; `sync` (mirror) also deletes what the source no longer has'
+        dry_run:
+          type: boolean
+          default: false
+          description: List what would change without touching anything
+        create_bucket:
+          type: boolean
+          default: false
+          description: Exports to S3 only; create the bucket at the provider if it does not exist (SFTP folders are always created)
+
+    Transfer:
+      type: object
+      properties:
+        id:
+          type: integer
+        sync_id:
+          type: integer
+          nullable: true
+          description: Set on the runs of a scheduled sync
+        connection_id:
+          type: integer
+          nullable: true
+        connection_name:
+          type: string
+        provider:
+          type: string
+        direction:
+          type: string
+          enum: [import, export]
+        mode:
+          type: string
+          enum: [copy, sync]
+        local_bucket:
+          type: string
+        remote_bucket:
+          type: string
+        prefix:
+          type: string
+        dry_run:
+          type: boolean
+        create_bucket:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        active:
+          type: boolean
+          description: Waiting or running; poll until false
+        cancelling:
+          type: boolean
+        percent:
+          type: number
+          nullable: true
+        bytes_done:
+          type: integer
+        bytes_total:
+          type: integer
+        files_done:
+          type: integer
+        files_total:
+          type: integer
+        errors:
+          type: integer
+        speed:
+          type: integer
+          description: Bytes per second
+        eta:
+          type: integer
+          nullable: true
+          description: Seconds left
+        message:
+          type: string
+          nullable: true
+          description: What happened, once finished
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        log:
+          type: array
+          description: Tail of the rclone log; only on `GET /api/transfers/{transfer}`
+          items:
+            type: string
+
+    SyncRequest:
+      type: object
+      required: [direction, connection_id, remote_bucket, local_bucket, mode, interval_minutes]
+      properties:
+        direction:
+          type: string
+          enum: [import, export]
+          description: '`import` syncs in (provider → Johnny), `export` syncs out'
+        connection_id:
+          type: integer
+        remote_bucket:
+          type: string
+        local_bucket:
+          type: string
+        prefix:
+          type: string
+          nullable: true
+        mode:
+          type: string
+          enum: [copy, sync]
+        interval_minutes:
+          type: integer
+          minimum: 1
+          maximum: 525600
+          example: 15
+        create_bucket:
+          type: boolean
+          default: false
+          description: Sync out only; the first run creates the bucket at the provider
+
+    SyncUpdateRequest:
+      type: object
+      properties:
+        interval_minutes:
+          type: integer
+          minimum: 1
+          maximum: 525600
+        mode:
+          type: string
+          enum: [copy, sync]
+        enabled:
+          type: boolean
+          description: False pauses the sync; true resumes it and runs it right away
+
+    Sync:
+      type: object
+      properties:
+        id:
+          type: integer
+        connection_id:
+          type: integer
+        connection_name:
+          type: string
+        direction:
+          type: string
+          enum: [import, export]
+        mode:
+          type: string
+          enum: [copy, sync]
+        local_bucket:
+          type: string
+        remote_bucket:
+          type: string
+        prefix:
+          type: string
+        interval_minutes:
+          type: integer
+        interval_label:
+          type: string
+          example: Every 15 minutes
+        enabled:
+          type: boolean
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        latest_run:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: integer
+            status:
+              type: string
+            message:
+              type: string
+              nullable: true
+            finished_at:
+              type: string
+              format: date-time
+              nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    SyncWithRuns:
+      allOf:
+        - $ref: '#/components/schemas/Sync'
+        - type: object
+          properties:
+            runs:
+              type: array
+              description: The latest runs, newest first (30 are kept)
+              items:
+                $ref: '#/components/schemas/Transfer'
+
 security:
   - bearerAuth: []
 
@@ -125,21 +849,17 @@ paths:
   /api/buckets/provision:
     post:
       tags: [Provisioning]
-      summary: Provision bucket and key
+      summary: Create bucket and dedicated key
       description: |
-        Creates a bucket, creates a new Garage key scoped to it, grants that key full access,
-        and grants the panel key (`johnny-default`) access so the UI can manage the bucket.
+        Creates a bucket (optional custom name), a new Garage key with a random name
+        `{bucket}-{hex}`, grants that key its scope (full control by default), and attaches the
+        panel key, the backup key and the keys that reach all buckets. Returns S3 connection
+        details and env-style variables.
       requestBody:
-        required: false
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ProvisionRequest'
-            examples:
-              empty:
-                value: {}
-              named:
-                value: { bucket: my-tenant-data }
       responses:
         '201':
           description: Created
@@ -154,30 +874,24 @@ paths:
                     type: string
                   endpoint:
                     type: string
-                    nullable: true
                   path_style:
                     type: boolean
                   key_name:
                     type: string
+                  scope:
+                    $ref: '#/components/schemas/Scope'
                   credentials:
-                    type: object
-                    properties:
-                      access_key_id:
-                        type: string
-                      secret_access_key:
-                        type: string
+                    $ref: '#/components/schemas/Credentials'
                   env:
                     type: object
                     additionalProperties:
                       type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '422':
-          description: Validation or bucket creation failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/ValidationError'
         '500':
-          description: Key creation or permission step failed
+          description: The bucket was created but the key or its permissions failed
           content:
             application/json:
               schema:
@@ -199,16 +913,14 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/BucketListItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '503':
-          description: S3 list failed (e.g. AccessDenied)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/UpstreamError'
     post:
       tags: [Buckets]
       summary: Create bucket
-      description: After creation, the panel Garage key receives read/write/owner on the bucket.
+      description: The panel key, the backup key and the keys that reach all buckets are granted on it.
       requestBody:
         required: true
         content:
@@ -228,25 +940,18 @@ paths:
                     properties:
                       name:
                         type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '422':
-          description: Validation or johnny error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/ValidationError'
 
   /api/buckets/{bucket}:
     parameters:
-      - name: bucket
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+      - $ref: '#/components/parameters/Bucket'
     get:
       tags: [Buckets]
-      summary: Get bucket details
-      description: S3 metadata plus `johnny bucket info` (keys and raw output).
+      summary: Get bucket
+      description: Size, object count, quotas and the keys that can use the bucket, each with its scope.
       responses:
         '200':
           description: OK
@@ -256,64 +961,181 @@ paths:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                      created:
-                        type: string
-                        nullable: true
-                      keys:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            id:
-                              type: string
-                            name:
-                              type: string
-                            permissions:
-                              type: string
-                      info_raw:
-                        type: string
-                        nullable: true
+                    $ref: '#/components/schemas/Bucket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
-          description: Bucket not found in S3 listing
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/NotFound'
         '503':
-          description: Could not list buckets
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/UpstreamError'
     delete:
       tags: [Buckets]
       summary: Delete bucket
-      description: Bucket must be empty. The `default` bucket cannot be deleted.
+      description: The bucket must be empty. The `default` bucket is protected.
       responses:
         '204':
-          description: No content
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Protected bucket
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/Forbidden'
         '422':
-          description: Delete failed
+          $ref: '#/components/responses/ValidationError'
+
+  /api/buckets/{bucket}/settings:
+    parameters:
+      - $ref: '#/components/parameters/Bucket'
+    get:
+      tags: [Bucket settings]
+      summary: Get usage, quotas, CORS and expiry rules
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorMessage'
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/BucketSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /api/buckets/{bucket}/quotas:
+    parameters:
+      - $ref: '#/components/parameters/Bucket'
+    put:
+      tags: [Bucket settings]
+      summary: Set quotas
+      description: Both fields are required; null removes that limit. Garage refuses uploads that would go over a quota.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Quotas'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      bucket:
+                        type: string
+                      max_size:
+                        type: integer
+                        nullable: true
+                      max_objects:
+                        type: integer
+                        nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/buckets/{bucket}/cors:
+    parameters:
+      - $ref: '#/components/parameters/Bucket'
+    put:
+      tags: [Bucket settings]
+      summary: Set the CORS rule
+      description: Which websites may read or write the bucket from a browser. An empty `origins` list removes the rule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorsRequest'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Cors'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /api/buckets/{bucket}/lifecycle:
+    parameters:
+      - $ref: '#/components/parameters/Bucket'
+    put:
+      tags: [Bucket settings]
+      summary: Set expiry rules
+      description: |
+        Delete objects a number of days after their upload (optionally under one folder only) and
+        clean up unfinished multipart uploads. Both day fields are required; null turns that rule
+        off. Garage applies the rules once a day.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleRequest'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Lifecycle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /api/scopes:
+    get:
+      tags: [Keys]
+      summary: List scopes
+      description: The scopes a key can get on a bucket, and the Garage permissions behind each.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScopeInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /api/keys:
     get:
       tags: [Keys]
       summary: List keys
-      description: System keys `johnny-default` and `johnny-backup` are omitted.
+      description: System keys (panel, backup) are not listed.
       responses:
         '200':
           description: OK
@@ -326,69 +1148,56 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/KeyListItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '503':
-          description: Could not run johnny key list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/UpstreamError'
     post:
       tags: [Keys]
       summary: Create key
+      description: |
+        Creates the key and, in the same call, grants it: on no bucket yet (default), on every
+        bucket (`access: all`) or on the listed buckets (`access: buckets`), with one scope.
+        The secret is returned once.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/KeyCreateRequest'
+            examples:
+              perBucket:
+                summary: Read-only key for two buckets
+                value:
+                  name: reports
+                  access: buckets
+                  scope: read
+                  buckets: [media, invoices]
+              global:
+                summary: Read and write on all buckets
+                value:
+                  name: backup-agent
+                  access: all
+                  scope: read-write
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema:
-                oneOf:
-                  - type: object
-                    properties:
-                      id:
-                        type: string
-                      name:
-                        type: string
-                      credentials:
-                        type: object
-                        properties:
-                          access_key_id:
-                            type: string
-                          secret_access_key:
-                            type: string
-                      raw_output:
-                        type: string
-                  - type: object
-                    properties:
-                      message:
-                        type: string
-                      name:
-                        type: string
-                      raw_output:
-                        type: string
+                $ref: '#/components/schemas/KeyCreated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '422':
-          description: Validation or create failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/ValidationError'
 
   /api/keys/{keyId}:
     parameters:
-      - name: keyId
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^GK[0-9a-fA-F]+$'
+      - $ref: '#/components/parameters/KeyId'
     get:
       tags: [Keys]
       summary: Get key
+      description: The key, whether it reaches all buckets, and the buckets it can use with their scope.
       responses:
         '200':
           description: OK
@@ -398,61 +1207,105 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/KeyListItem'
+                    $ref: '#/components/schemas/Key'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: System keys are hidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/NotFound'
         '503':
-          description: Could not list keys
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/UpstreamError'
     delete:
       tags: [Keys]
       summary: Delete key
+      description: Applications using the key lose access at once.
       responses:
         '204':
-          description: No content
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: System key
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Key not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/NotFound'
         '422':
-          description: Delete failed
+          $ref: '#/components/responses/ValidationError'
+
+  /api/keys/{keyId}/all-buckets:
+    parameters:
+      - $ref: '#/components/parameters/KeyId'
+    put:
+      tags: [Keys]
+      summary: Grant the key on all buckets
+      description: |
+        The key gets exactly this scope on every bucket, and on each bucket created later. Call it
+        again with another scope to change it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope]
+              properties:
+                scope:
+                  $ref: '#/components/schemas/Scope'
+      responses:
+        '200':
+          description: Applied
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorMessage'
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      all_buckets:
+                        type: boolean
+                      scope:
+                        $ref: '#/components/schemas/Scope'
+                      buckets:
+                        type: integer
+                        description: Buckets the scope was applied to
+                      failed_buckets:
+                        type: array
+                        items:
+                          type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Keys]
+      summary: Stop granting the key on new buckets
+      description: The access the key has now stays as it is; change it bucket by bucket afterwards.
+      responses:
+        '204':
+          description: Done
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/buckets/{bucket}/keys:
     parameters:
-      - name: bucket
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
+      - $ref: '#/components/parameters/Bucket'
     post:
       tags: [Bucket keys]
-      summary: Grant key permissions on bucket
+      summary: Grant a key on the bucket
+      description: |
+        With `scope` the key gets exactly that access (other permissions are revoked). With the
+        read / write / owner flags the permissions are added to what the key already has.
       requestBody:
         required: true
         content:
@@ -461,7 +1314,7 @@ paths:
               $ref: '#/components/schemas/BucketKeyGrantRequest'
       responses:
         '201':
-          description: Created
+          description: Granted
           content:
             application/json:
               schema:
@@ -471,69 +1324,543 @@ paths:
                     type: string
                   key_id:
                     type: string
+                  scope:
+                    $ref: '#/components/schemas/Scope'
                   read:
                     type: boolean
                   write:
                     type: boolean
                   owner:
                     type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No key with exactly this id (id prefixes are not accepted)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/NotFound'
         '422':
-          description: Validation or johnny error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/ValidationError'
 
   /api/buckets/{bucket}/keys/{keyId}:
     parameters:
-      - name: bucket
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^[a-z0-9][a-z0-9._-]{1,254}$'
-      - name: keyId
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^GK[0-9a-fA-F]+$'
+      - $ref: '#/components/parameters/Bucket'
+      - $ref: '#/components/parameters/KeyId'
     delete:
       tags: [Bucket keys]
-      summary: Revoke key permissions on bucket
-      description: |
-        Send which permissions to revoke (same as the panel form). Use a JSON body or query parameters
-        such as `?read=true&write=true&owner=false`. At least one flag must be true.
+      summary: Revoke permissions
+      description: Pass the flags to remove (`read`, `write`, `owner`) as query string or JSON body.
       requestBody:
-        required: false
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/BucketKeyRevokeRequest'
+      parameters:
+        - name: read
+          in: query
+          schema:
+            type: boolean
+        - name: write
+          in: query
+          schema:
+            type: boolean
+        - name: owner
+          in: query
+          schema:
+            type: boolean
       responses:
         '204':
-          description: No content
+          description: Revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: System keys (johnny-default, johnny-backup) cannot be revoked
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Key id not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
+          $ref: '#/components/responses/NotFound'
         '422':
-          description: Validation or johnny error
+          $ref: '#/components/responses/ValidationError'
+
+  /api/providers:
+    get:
+      tags: [Connections]
+      summary: List supported providers
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorMessage'
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Provider'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/connections:
+    get:
+      tags: [Connections]
+      summary: List connections
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Connections]
+      summary: Add a connection
+      description: |
+        Saves the connection (secrets are stored encrypted) and tries it. A connection the
+        provider refuses is saved all the same: `reachable` is false and `check_error` says why.
+        The first successful contact with an SFTP server pins its host key; saving the connection
+        again pins it afresh.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionRequest'
+            example:
+              name: R2 archive
+              provider: r2
+              endpoint: https://<account-id>.r2.cloudflarestorage.com
+              region: auto
+              access_key_id: '<access key id>'
+              secret_access_key: '<secret access key>'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/connections/{connection}:
+    parameters:
+      - $ref: '#/components/parameters/Connection'
+    get:
+      tags: [Connections]
+      summary: Get connection
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Connections]
+      summary: Update connection
+      description: Send every field again; leave `secret_access_key` out to keep the stored one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionRequest'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Connections]
+      summary: Delete connection
+      description: Refused while a transfer is running on it or a sync uses it. Past transfers stay in the history.
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/connections/{connection}/check:
+    parameters:
+      - $ref: '#/components/parameters/Connection'
+    post:
+      tags: [Connections]
+      summary: Check that the credentials still work
+      responses:
+        '200':
+          description: Checked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      reachable:
+                        type: boolean
+                      error:
+                        type: string
+                        nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/connections/{connection}/buckets:
+    parameters:
+      - $ref: '#/components/parameters/Connection'
+    get:
+      tags: [Connections]
+      summary: List the buckets of the provider, or the folders of the SFTP server
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BucketListItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /api/transfers:
+    get:
+      tags: [Transfers]
+      summary: List transfers
+      description: Newest first. Without `sync_id`, the runs of scheduled syncs are left out.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, running, completed, failed, cancelled]
+        - name: sync_id
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Transfers]
+      summary: Start an import or an export
+      description: |
+        The transfer is queued and runs in the background (a few at a time). Poll
+        `GET /api/transfers/{transfer}` while `active` is true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+            example:
+              direction: import
+              connection_id: 1
+              remote_bucket: legacy-media
+              local_bucket: media
+              mode: copy
+      responses:
+        '201':
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/transfers/{transfer}:
+    parameters:
+      - $ref: '#/components/parameters/Transfer'
+    get:
+      tags: [Transfers]
+      summary: Get a transfer with its progress and log
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Transfers]
+      summary: Remove a finished transfer from the history
+      responses:
+        '204':
+          description: Removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/transfers/{transfer}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/Transfer'
+    post:
+      tags: [Transfers]
+      summary: Cancel a transfer
+      description: A waiting transfer is cancelled at once; a running one stops within a few seconds. Files already copied stay.
+      responses:
+        '200':
+          description: Cancelled, or asked to stop (`cancelling` is true)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/transfers/{transfer}/retry:
+    parameters:
+      - $ref: '#/components/parameters/Transfer'
+    post:
+      tags: [Transfers]
+      summary: Run a finished transfer again
+      description: Same settings; files already at the destination are skipped.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                for_real:
+                  type: boolean
+                  description: Turns a dry run into a real run
+      responses:
+        '201':
+          description: The new transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/syncs:
+    get:
+      tags: [Syncs]
+      summary: List scheduled syncs
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sync'
+                  scheduler_running:
+                    type: boolean
+                    description: Whether cron ran the panel's scheduler in the last few minutes
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Syncs]
+      summary: Create a sync
+      description: |
+        The first run starts at once, then the sync repeats every `interval_minutes`. Runs of the
+        same sync never overlap: one that is due while the previous is still going starts when it ends.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRequest'
+            example:
+              direction: export
+              connection_id: 1
+              remote_bucket: media-offsite
+              local_bucket: media
+              mode: copy
+              interval_minutes: 15
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SyncWithRuns'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/syncs/{sync}:
+    parameters:
+      - $ref: '#/components/parameters/Sync'
+    get:
+      tags: [Syncs]
+      summary: Get a sync with its latest runs
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SyncWithRuns'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Syncs]
+      summary: Change, pause or resume a sync
+      description: Send only the fields to change (`PATCH` works too).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncUpdateRequest'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SyncWithRuns'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Syncs]
+      summary: Delete a sync and its runs
+      description: The files it copied stay where they are, on both sides.
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/syncs/{sync}/run:
+    parameters:
+      - $ref: '#/components/parameters/Sync'
+    post:
+      tags: [Syncs]
+      summary: Run a sync now
+      responses:
+        '201':
+          description: The run that started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'

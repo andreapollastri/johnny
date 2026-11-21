@@ -4,6 +4,10 @@
 
 @section('title', 'Updates — '.config('app.name'))
 
+@section('crumbs')
+    <span>Updates</span>
+@endsection
+
 @section('content')
 @php
     $busy = $running || $serverRunning;
@@ -18,19 +22,19 @@
     };
 @endphp
 
-<div class="page-header page-header-row">
+<div class="page-head">
     <div>
-        <h1>Updates</h1>
-        <p class="subtitle">The build of Johnny this server runs, its updates, and the server's own packages.</p>
+        <h1 class="page-title">Updates</h1>
+        <p class="page-sub">The build of Johnny this server runs, its updates, and the server's own packages.</p>
     </div>
     @if ($managed)
-        <div class="page-header-actions">
+        <div class="page-actions">
             @if (! empty($state['checked_at']))
                 <span class="muted text-xs" title="{{ $state['checked_at'] }}">Checked {{ Carbon::parse($state['checked_at'])->diffForHumans() }}</span>
             @endif
             <form method="POST" action="{{ route('updates.check') }}" class="inline-form">
                 @csrf
-                <button type="submit" class="ghost sm" @disabled($busy)>
+                <button type="submit" class="btn btn-sm" @disabled($busy)>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
                     Check now
                 </button>
@@ -38,13 +42,6 @@
         </div>
     @endif
 </div>
-
-@if (session('status'))
-    <div class="status">{{ session('status') }}</div>
-@endif
-@if ($errors->any())
-    <div class="errors">{{ $errors->first() }}</div>
-@endif
 
 @unless ($managed)
     <div class="card">
@@ -71,13 +68,13 @@
                       data-confirm="Force an update now? Johnny installs the newest build of its channel again, even when it is the one already installed (and also when its history differs), with the same database backup and rollback as every update. It never goes back to an older build.">
                     @csrf
                     <input type="hidden" name="force" value="1">
-                    <button type="submit" class="ghost sm" @disabled($busy)>Force update</button>
+                    <button type="submit" class="btn btn-sm" @disabled($busy)>Force update</button>
                 </form>
                 @if ($available && ! $running)
                     <form method="POST" action="{{ route('updates.start') }}" class="inline-form"
                           data-confirm="Update Johnny to {{ $available }} now? It backs up the panel database, checks the new build out, runs its install steps and checks that everything answers; if a step fails, the previous build and its database come back. The panel is in maintenance for a moment.">
                         @csrf
-                        <button type="submit" class="sm" @disabled($busy)>
+                        <button type="submit" class="btn btn-primary btn-sm" @disabled($busy)>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>
                             Update to {{ $available }}
                         </button>
@@ -176,8 +173,8 @@
             </div>
             <form method="POST" action="{{ route('updates.channel') }}" class="stack">
                 @csrf
-                <button type="submit" name="channel" value="stable" @class(['sm', 'ghost' => $channel !== 'stable']) aria-pressed="{{ $channel === 'stable' ? 'true' : 'false' }}" @disabled($busy)>Stable releases</button>
-                <button type="submit" name="channel" value="beta" @class(['sm', 'ghost' => $channel !== 'beta']) aria-pressed="{{ $channel === 'beta' ? 'true' : 'false' }}" @disabled($busy)>Beta (main branch)</button>
+                <button type="submit" name="channel" value="stable" @class(['btn', 'btn-sm', 'is-pressed' => $channel === 'stable']) aria-pressed="{{ $channel === 'stable' ? 'true' : 'false' }}" @disabled($busy)>Stable releases</button>
+                <button type="submit" name="channel" value="beta" @class(['btn', 'btn-sm', 'is-pressed' => $channel === 'beta']) aria-pressed="{{ $channel === 'beta' ? 'true' : 'false' }}" @disabled($busy)>Beta (main branch)</button>
             </form>
         </div>
 
@@ -189,7 +186,7 @@
             <form method="POST" action="{{ route('updates.auto') }}" class="inline-form">
                 @csrf
                 <input type="hidden" name="enabled" value="{{ $automatic ? 0 : 1 }}">
-                <button type="submit" class="ghost sm">{{ $automatic ? 'Turn off' : 'Turn on' }}</button>
+                <button type="submit" class="btn btn-sm">{{ $automatic ? 'Turn off' : 'Turn on' }}</button>
             </form>
         </div>
     </div>
@@ -201,7 +198,7 @@
             <form method="POST" action="{{ route('updates.system.start') }}" class="inline-form"
                   data-confirm="Update every package of the server to its newest version now? Ubuntu and its security fixes, PHP, Caddy, Composer; the services whose packages changed restart for a moment.">
                 @csrf
-                <button type="submit" class="ghost sm" @disabled($busy)>Update the server now</button>
+                <button type="submit" class="btn btn-sm" @disabled($busy)>Update the server now</button>
             </form>
         </div>
 
@@ -280,7 +277,7 @@
             <form method="POST" action="{{ route('updates.system.auto') }}" class="inline-form">
                 @csrf
                 <input type="hidden" name="enabled" value="{{ $serverAutomatic ? 0 : 1 }}">
-                <button type="submit" class="ghost sm">{{ $serverAutomatic ? 'Turn off' : 'Turn on' }}</button>
+                <button type="submit" class="btn btn-sm">{{ $serverAutomatic ? 'Turn off' : 'Turn on' }}</button>
             </form>
         </div>
     </div>

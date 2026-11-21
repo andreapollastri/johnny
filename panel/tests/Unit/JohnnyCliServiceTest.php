@@ -78,6 +78,44 @@ class JohnnyCliServiceTest extends TestCase
         ], $keys);
     }
 
+    public function test_it_reads_size_and_object_count_from_bucket_info(): void
+    {
+        $this->assertSame(
+            ['size' => 0, 'objects' => 0, 'max_size' => null, 'max_objects' => null],
+            $this->cli->parseBucketUsage($this->fixture('bucket-info')),
+        );
+    }
+
+    public function test_it_reads_quotas_from_bucket_info(): void
+    {
+        // Not captured from a live node: written after the lines Garage 2.x prints when quotas are set.
+        $this->assertSame(
+            ['size' => 535_717_478, 'objects' => 35, 'max_size' => 10 * 1024 ** 3, 'max_objects' => 1000],
+            $this->cli->parseBucketUsage($this->fixture('bucket-info-quotas')),
+        );
+    }
+
+    public function test_quotas_are_set_in_bytes_and_removed_with_none(): void
+    {
+        $this->fakeJohnny();
+
+        $this->cli->setBucketQuotas('media', 5 * 1024 ** 3, null);
+
+        $this->assertJohnnyRan(['bucket', 'set-quotas', '--max-size', '5368709120', '--max-objects', 'none', 'media']);
+    }
+
+    public function test_ensure_bucket_creates_only_what_is_missing(): void
+    {
+        $this->fakeJohnny();
+
+        $this->assertNull($this->cli->ensureBucket('media'));
+        $this->assertJohnnyDidntRun(['bucket', 'create']);
+
+        $this->assertNull($this->cli->ensureBucket('photos'));
+        $this->assertJohnnyRan(['bucket', 'create', 'photos']);
+        $this->assertJohnnyRan(['bucket', 'allow', '--read', 'photos', '--key', 'johnny-backup']);
+    }
+
     public function test_it_extracts_credentials_from_key_create_output(): void
     {
         $this->assertSame([
@@ -104,6 +142,32 @@ class JohnnyCliServiceTest extends TestCase
         $this->assertTrue($this->cli->isSystemKey(self::PANEL_KEY_ID));
         $this->assertTrue($this->cli->isSystemKey('GK7c1b2d3e4f5a6b7c8d9e0f1a'));
         $this->assertFalse($this->cli->isSystemKey(self::WEB_APP_KEY_ID));
+    }
+
+    public function test_it_reads_the_buckets_of_a_key_from_key_info(): void
+    {
+        // Reconstructed from Garage 2.4's table (see key-create.txt for a captured header).
+        $this->assertSame([
+            ['bucket' => 'default', 'permissions' => 'write'],
+            ['bucket' => 'media', 'permissions' => 'read, write'],
+            ['bucket' => 'tenant-acme', 'permissions' => 'read'],
+        ], $this->cli->parseKeyInfoBuckets($this->fixture('key-info')));
+
+        $this->assertSame([], $this->cli->parseKeyInfoBuckets($this->fixture('key-create')));
+    }
+
+    public function test_a_scope_grants_its_permissions_and_revokes_the_rest(): void
+    {
+        $this->fakeJohnny();
+
+        $this->cli->setKeyScope('media', self::WEB_APP_KEY_ID, 'read');
+        $this->cli->setKeyScope('media', self::WEB_APP_KEY_ID, 'full');
+
+        $this->assertJohnnyRan(['bucket', 'allow', '--read', 'media', '--key', self::WEB_APP_KEY_ID]);
+        $this->assertJohnnyRan(['bucket', 'deny', '--write', '--owner', 'media', '--key', self::WEB_APP_KEY_ID]);
+        $this->assertJohnnyRan(['bucket', 'allow', '--read', '--write', '--owner', 'media', '--key', self::WEB_APP_KEY_ID]);
+        // Full control has nothing left to revoke.
+        $this->assertJohnnyDidntRun(['bucket', 'deny', '--read']);
     }
 
     public function test_permission_commands_pass_only_requested_flags(): void

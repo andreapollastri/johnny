@@ -12,7 +12,7 @@ Nothing is installed system-wide. Garage data, credentials and the panel databas
 
 - [Garage](https://garagehq.deuxfleurs.fr/) 2.x in `PATH` (macOS: `brew install garage`; elsewhere use the
   release binary and set `GARAGE_BIN`)
-- PHP 8.5 and Composer
+- PHP 8.5 or 8.6, and Composer
 - `curl` (7.75+, for `--aws-sigv4`) and `openssl`
 - For screenshots only: Node.js 20+ and Google Chrome
 
@@ -68,7 +68,26 @@ npm --prefix demo install
 node demo/screenshots.mjs            # writes docs/img/*.jpg
 ```
 
-The script signs in, captures every page in light mode (plus dashboard and file browser in dark
-mode), creates and deletes a temporary key to show the one-time credentials card, and starts and
-cancels a 2FA enrolment to show the QR code. Set `CHROME_PATH` to use a Chromium build instead of
+The script signs in, captures every page in light mode (plus dashboard, file browser and
+transfers in dark mode), creates and deletes a temporary read-only key for all buckets to show
+the one-time credentials card, and starts and cancels a 2FA enrolment to show the QR code. For
+the Transfers pages it connects the demo to itself as "another Johnny", creates a sync from
+`website-assets` into `website-assets-copy`, captures it and removes sync and connection again;
+this part needs `rclone` and is skipped with a message when something is missing.
+
+The pictures in `docs/img` for 2.0 were first made from the panel's views with sample data;
+running the script replaces them with captures of the live demo, with the same file names. Set `CHROME_PATH` to use a Chromium build instead of
 Google Chrome.
+
+## Transfers and scheduled syncs in the demo
+
+Transfers need `rclone` on the `PATH` (`brew install rclone`, `apt install rclone`). To try them
+without another provider, add a connection of type **Johnny** that points at the demo's own S3
+endpoint with the demo key, and copy one bucket into another.
+
+The demo has no cron: scheduled syncs start while a Transfers page is open. To run them like a
+server does, keep the scheduler going in another terminal:
+
+```bash
+cd panel && php artisan schedule:work
+```

@@ -1,0 +1,15 @@
+==== ACCESS KEY INFORMATION ====
+Key ID:              GK5d510a5dc69f28e6b744a688
+Key name:            web-app
+Secret key:          (redacted)
+Created:             2026-10-07 00:21:09.412 +02:00
+Validity:            valid
+Expiration:          never
+
+Can create buckets:  false
+
+==== BUCKETS FOR THIS KEY ====
+Permissions  ID                Global aliases  Local aliases
+RW           f1b17fa555341ee2  media           
+R            6fd1ee2fbf0085d2  tenant-acme     
+ W           3422c394a403d778  default         

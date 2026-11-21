@@ -4,6 +4,6 @@
 panel.example.com {
     root * /opt/johnny/panel/public
     encode gzip zstd
-    php_fastcgi unix//run/php/php8.5-fpm.sock
+    php_fastcgi unix//run/php/php8.6-fpm.sock
     file_server
 }

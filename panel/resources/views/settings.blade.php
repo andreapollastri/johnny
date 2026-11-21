@@ -2,36 +2,45 @@
 
 @section('title', 'Settings — '.config('app.name'))
 
+@section('crumbs')
+    <span>Settings</span>
+@endsection
+
+{{-- Fortify reports two-factor changes as codes: say them in words. --}}
+@section('flash')
+    @if ($flashStatus = session('status'))
+        <div class="flash flash-ok" role="status"><span>{{ match ($flashStatus) {
+            'recovery-codes-generated' => 'Recovery codes have been regenerated. Save the new codes — the old ones no longer work.',
+            'two-factor-authentication-disabled' => 'Two-factor authentication has been disabled.',
+            'two-factor-authentication-enabled' => 'Two-factor authentication setup started. Confirm with your app to finish.',
+            'two-factor-authentication-confirmed' => 'Two-factor authentication is now enabled.',
+            default => $flashStatus,
+        } }}</span></div>
+    @endif
+    @if ($errors->any())
+        <div class="flash flash-err" role="alert"><span>{{ $errors->first() }}</span></div>
+    @endif
+@endsection
+
 @section('content')
 @php($user = auth()->user())
 
-<div class="page-header">
-    <h1>Settings</h1>
-    <p class="subtitle">Two-factor authentication and panel API tokens. See the <a target="_blank" rel="noopener" href="{{ route('api.docs') }}">API docs</a> for the endpoints these tokens unlock.</p>
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Settings</h1>
+        <p class="page-sub">Two-factor authentication for your account, and tokens for the panel's own API. The <a target="_blank" rel="noopener" href="{{ route('api.docs') }}">API docs</a> list what a token can do.</p>
+    </div>
 </div>
-
-@if ($flashStatus = session('status'))
-    <div class="status">{{ match ($flashStatus) {
-        'recovery-codes-generated' => 'Recovery codes have been regenerated. Save the new codes — the old ones no longer work.',
-        'two-factor-authentication-disabled' => 'Two-factor authentication has been disabled.',
-        'two-factor-authentication-enabled' => 'Two-factor authentication setup started. Confirm with your app to finish.',
-        'two-factor-authentication-confirmed' => 'Two-factor authentication is now enabled.',
-        default => $flashStatus,
-    } }}</div>
-@endif
-@if ($errors->any())
-    <div class="errors">{{ $errors->first() }}</div>
-@endif
 
 @if (session('sanctum_token_plain'))
 <div class="card card-highlight">
     <h2>New API token</h2>
-    <p class="muted text-sm">Copy this token now — it will not be shown again. Use it as <code class="text-xs">Authorization: Bearer …</code></p>
+    <p class="card-sub">Copy this token now — it will not be shown again. Use it as <code class="text-xs">Authorization: Bearer …</code></p>
     <div class="copy-fields">
         <div class="copy-field">
             <span class="copy-label">Token</span>
             <code id="new-api-token">{{ session('sanctum_token_plain') }}</code>
-            <button type="button" class="ghost sm" data-copy-from="#new-api-token">Copy</button>
+            <button type="button" class="btn btn-sm" data-copy-from="#new-api-token">Copy</button>
         </div>
     </div>
 </div>
@@ -45,7 +54,7 @@
         <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-2">
             @csrf
             @method('DELETE')
-            <button type="submit" class="danger">Disable 2FA</button>
+            <button type="submit" class="btn btn-danger">Disable 2FA</button>
         </form>
 
         @if ($recoveryCodes !== null)
@@ -59,10 +68,10 @@
                         @endforeach
                     </div>
                     <div class="recovery-codes-actions">
-                        <button type="button" class="ghost sm" data-copy-from="#recovery-codes-plain">Copy all</button>
+                        <button type="button" class="btn btn-sm" data-copy-from="#recovery-codes-plain">Copy all</button>
                         <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0; display:inline;" data-confirm="Regenerate all recovery codes? The current codes will stop working immediately.">
                             @csrf
-                            <button type="submit" class="ghost sm">Regenerate codes</button>
+                            <button type="submit" class="btn btn-sm">Regenerate codes</button>
                         </form>
                     </div>
                     <pre id="recovery-codes-plain" class="recovery-codes-plain">{{ implode("\n", $recoveryCodes) }}</pre>
@@ -70,7 +79,7 @@
                     <p class="muted text-sm">No recovery codes left. Generate a new set.</p>
                     <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" data-confirm="Generate new recovery codes?">
                         @csrf
-                        <button type="submit" class="ghost sm">Generate recovery codes</button>
+                        <button type="submit" class="btn btn-sm">Generate recovery codes</button>
                     </form>
                 @endif
             </div>
@@ -80,12 +89,12 @@
                 @if ($recoveryCodesExhausted)
                     <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" data-confirm="Generate new recovery codes?">
                         @csrf
-                        <button type="submit" class="ghost sm">Generate recovery codes</button>
+                        <button type="submit" class="btn btn-sm">Generate recovery codes</button>
                     </form>
                 @else
                     <form method="POST" action="{{ url('/user/two-factor-recovery-codes') }}" style="margin:0;" data-confirm="Regenerate all recovery codes? The current codes will stop working immediately.">
                         @csrf
-                        <button type="submit" class="ghost sm">Regenerate recovery codes</button>
+                        <button type="submit" class="btn btn-sm">Regenerate recovery codes</button>
                     </form>
                 @endif
             </div>
@@ -108,19 +117,19 @@
                 <label for="code">Authentication code</label>
                 <input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required>
             </div>
-            <button type="submit">Confirm and enable</button>
+            <button type="submit" class="btn btn-primary">Confirm and enable</button>
         </form>
         <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-1" data-confirm="Cancel two-factor setup? You can start again later.">
             @csrf
             @method('DELETE')
-            <button type="submit" class="ghost">Cancel setup</button>
+            <button type="submit" class="btn btn-ghost">Cancel setup</button>
         </form>
 
     @else
         <p class="tfa-state"><span class="badge badge-muted">Disabled</span> <span class="muted">Protect your account with time-based one-time passwords (TOTP).</span></p>
         <form method="POST" action="{{ url('/user/two-factor-authentication') }}" class="mt-2">
             @csrf
-            <button type="submit">Enable 2FA</button>
+            <button type="submit" class="btn btn-primary">Enable 2FA</button>
         </form>
     @endif
 </div>
@@ -132,13 +141,13 @@
     <form method="POST" action="{{ route('settings.tokens.store') }}" class="form-row">
         @csrf
         <input type="text" name="name" value="{{ old('name') }}" placeholder="Label (e.g. CI, backup script)" required maxlength="255">
-        <button type="submit">Create token</button>
+        <button type="submit" class="btn btn-primary">Create token</button>
     </form>
 </div>
 
 @if ($tokens->isNotEmpty())
-<div class="card">
-    <h2>Active tokens</h2>
+<div class="card card-flush">
+    <div class="card-head"><h2>Active tokens</h2></div>
     <div class="table-wrap">
     <table>
         <thead>
@@ -146,7 +155,7 @@
                 <th>Name</th>
                 <th>Last used</th>
                 <th>Created</th>
-                <th class="col-actions"></th>
+                <th class="col-actions"><span class="sr-only">Actions</span></th>
             </tr>
         </thead>
         <tbody>
@@ -159,7 +168,7 @@
                     <form method="POST" action="{{ route('settings.tokens.destroy', $t->id) }}" data-confirm="Revoke this token? Apps using it will stop working." style="margin:0;">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" class="danger sm">Revoke</button>
+                        <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
                     </form>
                 </td>
             </tr>
@@ -170,8 +179,8 @@
 </div>
 @else
 <div class="card">
-    <div class="empty-state">
-        <p>No API tokens yet. Create one above to call authenticated panel endpoints.</p>
+    <div class="empty">
+        <p>No API tokens yet. Create one above to call the panel's API from scripts or CI.</p>
     </div>
 </div>
 @endif

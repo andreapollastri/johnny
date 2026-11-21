@@ -30,7 +30,7 @@
             <label for="password_confirmation">Confirm password</label>
             <input id="password_confirmation" type="password" name="password_confirmation" required autocomplete="new-password">
         </div>
-        <button type="submit">Update password</button>
+        <button type="submit" class="btn btn-primary">Update password</button>
     </form>
 </div>
 @endsection

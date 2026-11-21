@@ -124,7 +124,7 @@ if [[ "${panel_ok,,}" == "y" ]]; then
 ${PANEL_DOMAIN} {
     root * ${REPO_ROOT}/panel/public
     encode gzip zstd
-    php_fastcgi unix//run/php/php8.5-fpm.sock
+    php_fastcgi unix//run/php/php8.6-fpm.sock
     file_server
 }
 EOF
@@ -132,7 +132,7 @@ EOF
     echo "" >> /etc/caddy/Caddyfile
     echo "import /etc/caddy/johnny-panel.caddy" >> /etc/caddy/Caddyfile
   fi
-  systemctl restart php8.5-fpm
+  systemctl restart php8.6-fpm
   systemctl reload caddy
   echo "Panel URL: https://${PANEL_DOMAIN}"
   echo "Create admin: sudo -u www-data php ${REPO_ROOT}/panel/artisan johnny:admin your@email.com 'password'"

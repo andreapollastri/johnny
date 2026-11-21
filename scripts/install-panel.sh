@@ -17,6 +17,8 @@ PANEL_DIR="${REPO_ROOT}/panel"
 
 # shellcheck source=lib/johnny-wwwdata.sh
 source "${_SCRIPT_DIR}/lib/johnny-wwwdata.sh"
+# shellcheck source=lib/johnny-panel-cron.sh
+source "${_SCRIPT_DIR}/lib/johnny-panel-cron.sh"
 
 # Never use: sudo -u www-data cmd >file  (redirect runs as root — see lib/johnny-wwwdata.sh).
 
@@ -31,8 +33,10 @@ apt-get install -y software-properties-common curl git unzip sqlite3
 add-apt-repository -y ppa:ondrej/php
 apt-get update
 apt-get install -y \
-  php8.5-fpm php8.5-cli php8.5-mbstring php8.5-xml php8.5-curl php8.5-zip \
-  php8.5-sqlite3 php8.5-bcmath php8.5-intl
+  php8.6-fpm php8.6-cli php8.6-mbstring php8.6-xml php8.6-curl php8.6-zip \
+  php8.6-sqlite3 php8.6-bcmath php8.6-intl
+# `php` is PHP 8.6 even where an older version is installed too (cron, artisan, composer).
+update-alternatives --set php /usr/bin/php8.6 >/dev/null 2>&1 || true
 
 if ! command -v composer >/dev/null 2>&1; then
   curl -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php
@@ -96,6 +100,9 @@ if [[ -f "${REPO_ROOT}/config/johnny-panel.sudoers.example" ]]; then
   visudo -cf "${REPO_ROOT}/config/johnny-panel.sudoers.example" || die "Invalid sudoers file"
   install -m 0440 "${REPO_ROOT}/config/johnny-panel.sudoers.example" /etc/sudoers.d/johnny-panel
 fi
+
+# Every minute: scheduled syncs and keys that reach all buckets (php artisan schedule:run).
+install_panel_cron "$PANEL_DIR"
 
 echo "Laravel panel installed at $PANEL_DIR"
 echo "Next: configure Caddy/nginx (see config/caddy-panel.caddy.example) for $PANEL_DIR/public"

@@ -32,12 +32,12 @@
             >
             <p class="muted text-sm" id="two-factor-token-hint" style="margin-top:0.35rem;">6-digit code from your authenticator app.</p>
             <p class="two-factor-flip-wrap">
-                <button type="button" class="two-factor-flip" id="two-factor-flip" aria-label="Switch to recovery code">
+                <button type="button" class="link-btn" id="two-factor-flip" aria-label="Switch to recovery code">
                     Use a recovery code instead
                 </button>
             </p>
         </div>
-        <button type="submit">Continue</button>
+        <button type="submit" class="btn btn-primary">Continue</button>
     </form>
     <script>
     (function () {

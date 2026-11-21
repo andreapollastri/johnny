@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\JohnnyCliService;
+use App\Support\KeyScopes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ProvisionBucketController extends Controller
 {
@@ -20,7 +22,11 @@ class ProvisionBucketController extends Controller
     {
         $validated = $request->validate([
             'bucket' => ['nullable', 'string', 'max:255', 'regex:/^[a-z0-9][a-z0-9._-]{1,254}$/'],
+            'scope' => ['nullable', Rule::in(KeyScopes::ids())],
         ]);
+
+        // The dedicated key owns its bucket unless a narrower scope is asked for.
+        $scope = $validated['scope'] ?? KeyScopes::FULL;
 
         $bucketName = $validated['bucket'] ?? $this->randomBucketName();
 
@@ -58,7 +64,7 @@ class ProvisionBucketController extends Controller
             ], 500);
         }
 
-        $allowNew = $this->johnny->allowKeyOnBucket($keyName, $bucketName);
+        $allowNew = $this->johnny->bucketAllow($bucketName, $keyName, ...KeyScopes::flags($scope));
 
         if (! $allowNew->successful()) {
             return response()->json([
@@ -84,6 +90,7 @@ class ProvisionBucketController extends Controller
             'endpoint' => $endpoint,
             'path_style' => true,
             'key_name' => $keyName,
+            'scope' => $scope,
             'credentials' => [
                 'access_key_id' => $parsed['access_key_id'],
                 'secret_access_key' => $parsed['secret_access_key'],
