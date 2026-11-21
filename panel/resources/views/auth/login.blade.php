@@ -26,11 +26,11 @@
             <input id="password" type="password" name="password" required autocomplete="current-password">
         </div>
         <div class="form-group">
-            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
-                <input type="checkbox" name="remember" value="1"> <span class="muted">Remember me</span>
+            <label class="check">
+                <input type="checkbox" name="remember" value="1"> <span>Keep me signed in on this device</span>
             </label>
         </div>
-        <button type="submit">Sign in</button>
+        <button type="submit" class="btn btn-primary">Sign in</button>
     </form>
     <div class="auth-footer">
         <a href="{{ route('password.request') }}">Forgot password?</a>

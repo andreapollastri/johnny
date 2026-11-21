@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Transfer;
 use App\Services\GarageS3;
 use App\Services\JohnnyCliService;
 use Illuminate\Http\Request;
@@ -56,6 +57,8 @@ class DashboardController extends Controller
             'computedAt' => $stats['computed_at'] ? Carbon::parse($stats['computed_at']) : null,
             'topBucketsBySize' => array_slice($bySize, 0, 10),
             'topBucketsByCount' => array_slice($byCount, 0, 10),
+            // One-off transfers only: a sync that runs every minute would fill the list by itself.
+            'recentTransfers' => Transfer::query()->whereNull('sync_id')->latest('id')->limit(4)->get(),
         ]);
     }
 

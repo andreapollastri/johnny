@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\GarageS3;
 use App\Services\JohnnyCliService;
+use App\Support\KeyScopes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -83,12 +84,16 @@ class BucketApiController extends Controller
         }
 
         [$keys, $raw] = $this->johnny->parseBucketInfo($bucket);
+        $usage = $this->johnny->parseBucketUsage($raw);
 
         return response()->json([
             'data' => [
                 'name' => $meta['name'],
                 'created' => $meta['created'],
-                'keys' => $keys,
+                'size' => $usage['size'],
+                'objects' => $usage['objects'],
+                'quotas' => ['max_size' => $usage['max_size'], 'max_objects' => $usage['max_objects']],
+                'keys' => array_map(fn (array $key) => $key + ['scope' => KeyScopes::fromPermissions($key['permissions'])], $keys),
                 'info_raw' => $raw !== '' ? $raw : null,
             ],
         ]);

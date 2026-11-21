@@ -2,6 +2,9 @@
 
 @section('title', 'Confirm password — '.config('app.name'))
 
+{{-- Shown inside the panel (the user is signed in): the form below reports its own errors. --}}
+@section('flash')<!-- -->@endsection
+
 @section('content')
 <div class="auth-card">
     <div class="brand">
@@ -21,7 +24,7 @@
             <label for="password">Password</label>
             <input id="password" type="password" name="password" required autocomplete="current-password" autofocus>
         </div>
-        <button type="submit">Confirm</button>
+        <button type="submit" class="btn btn-primary">Confirm</button>
     </form>
 </div>
 @endsection

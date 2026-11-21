@@ -874,7 +874,7 @@
     "url": "https://johnny.web.ap.it",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux",
-    "softwareVersion": "1.2.1",
+    "softwareVersion": "2.0.0",
     "screenshot": "https://johnny.web.ap.it/img/dashboard.jpg",
     "license": "https://github.com/andreapollastri/johnny/blob/main/LICENSE",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -973,13 +973,13 @@
         <div class="coverage-row">
           <span class="n">04</span>
           <span class="name">Web panel + 2FA</span>
-          <span class="desc">Dashboard, file browser with folders and multi-upload, per-bucket key permissions, TOTP 2FA.</span>
+          <span class="desc">Dashboard, file browser with previews and share links, quotas, CORS and expiry rules, scoped access keys, TOTP 2FA.</span>
           <span class="tag">UI</span>
         </div>
         <div class="coverage-row">
           <span class="n">05</span>
           <span class="name">Panel REST API</span>
-          <span class="desc">11 JSON endpoints, one-call tenant provisioning, Swagger UI, and OpenAPI spec.</span>
+          <span class="desc">38 JSON endpoints for buckets, keys, transfers and syncs; one-call tenant provisioning, Swagger UI, OpenAPI spec.</span>
           <span class="tag">API</span>
         </div>
         <div class="coverage-row">
@@ -990,6 +990,12 @@
         </div>
         <div class="coverage-row">
           <span class="n">07</span>
+          <span class="name">Import, export, sync</span>
+          <span class="desc">Move buckets from and to AWS S3, R2, Spaces, B2, any S3 provider or an SFTP server: once, or kept in sync every minute and up.</span>
+          <span class="tag">Data</span>
+        </div>
+        <div class="coverage-row">
+          <span class="n">08</span>
           <span class="name">Local demo</span>
           <span class="desc">One script boots Garage, seeds ~1 GB of sample data, and serves the panel on your laptop.</span>
           <span class="tag">Dev</span>
@@ -1063,47 +1069,68 @@
       <div class="section-kicker">Web panel</div>
       <h2 class="section-title">A panel you'll actually use.</h2>
       <p class="section-lead">
-        Monitor storage, browse and upload files, manage keys and permissions, issue API tokens —
-        light or dark, secured with TOTP.
+        Browse, preview and share files, set quotas and expiry rules, hand out scoped keys, move
+        buckets in and out or keep them in sync — light or dark, secured with TOTP.
       </p>
 
       <div class="panel-tabs" role="tablist" aria-label="Panel screenshots">
         <button type="button" class="panel-tab active" role="tab" aria-selected="true"
           data-shot="img/dashboard.jpg" data-path="/dashboard"
-          data-caption="Dashboard — buckets, objects, stored data and disk usage at a glance">Dashboard</button>
+          data-caption="Dashboard — stored data, disk space, largest buckets and the latest transfers">Dashboard</button>
         <button type="button" class="panel-tab" role="tab" aria-selected="false"
           data-shot="img/dashboard-dark.jpg" data-path="/dashboard"
-          data-caption="Built-in dark mode, following your system or toggled from the header">Dark mode</button>
+          data-caption="Dark mode, following your system or the toggle in the bar">Dark mode</button>
         <button type="button" class="panel-tab" role="tab" aria-selected="false"
           data-shot="img/buckets.jpg" data-path="/buckets"
           data-caption="Buckets — create, filter and delete; the default bucket is protected">Buckets</button>
         <button type="button" class="panel-tab" role="tab" aria-selected="false"
-          data-shot="img/objects.jpg" data-path="/buckets/website-assets"
-          data-caption="File browser — folders, multi-file upload, downloads and pagination">Files</button>
+          data-shot="img/objects.jpg" data-path="/buckets/media-library"
+          data-caption="File browser — folders, drag and drop, resumable uploads and bulk actions">Files</button>
         <button type="button" class="panel-tab" role="tab" aria-selected="false"
-          data-shot="img/permissions.jpg" data-path="/buckets/website-assets?tab=keys"
-          data-caption="Per-bucket permissions — grant read, write or owner to any access key">Permissions</button>
+          data-shot="img/preview.jpg" data-path="/buckets/media-library"
+          data-caption="Preview images, video, audio, PDF and text; rename, move, share a link that expires">Preview</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/bucket-settings.jpg" data-path="/buckets/media-library?tab=settings"
+          data-caption="Bucket settings — quotas, expiry rules and CORS">Settings</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/permissions.jpg" data-path="/buckets/media-library?tab=keys"
+          data-caption="Bucket access — a new key for this bucket, or a scope for an existing one">Access</button>
         <button type="button" class="panel-tab" role="tab" aria-selected="false"
           data-shot="img/keys.jpg" data-path="/keys"
-          data-caption="Access keys — new credentials are shown once, ready to copy">Keys</button>
+          data-caption="Access keys — for chosen buckets or for all of them; credentials are shown once">Keys</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/transfers.jpg" data-path="/transfers"
+          data-caption="Transfers — connections to other providers, scheduled syncs and history">Transfers</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/transfer-new.jpg" data-path="/transfers/new"
+          data-caption="A new transfer — in or out, copy or mirror, once or kept in sync">New sync</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/sync.jpg" data-path="/syncs/1"
+          data-caption="A sync — its schedule, pause, run now and the latest runs">Sync</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/sftp.jpg" data-path="/transfers"
+          data-caption="Connections — any S3 provider, or an SFTP server">SFTP</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/palette.jpg" data-path="/dashboard"
+          data-caption="Jump to any page or bucket with Ctrl/⌘ K">Jump to</button>
+        <button type="button" class="panel-tab" role="tab" aria-selected="false"
+          data-shot="img/updates.jpg" data-path="/updates"
+          data-caption="Updates — release channel, nightly updates of Johnny and of the server">Updates</button>
         <button type="button" class="panel-tab" role="tab" aria-selected="false"
           data-shot="img/settings.jpg" data-path="/settings"
-          data-caption="Settings — TOTP two-factor authentication and Sanctum API tokens">Settings</button>
-        <button type="button" class="panel-tab" role="tab" aria-selected="false"
-          data-shot="img/api.jpg" data-path="/api/docs"
-          data-caption="Swagger UI for the REST API, with the OpenAPI spec at /api/openapi.yaml">API docs</button>
+          data-caption="Account — TOTP two-factor authentication and API tokens">Account</button>
       </div>
 
       <div class="browser-frame">
         <div class="browser-bar"><i></i><span id="panelUrl">panel.your-site.test/dashboard</span></div>
         <div class="browser-viewport" id="panelViewport" tabindex="0" aria-label="Screenshot viewport">
           <img id="panelShot" src="img/dashboard.jpg"
-            alt="Johnny web panel: dashboard with bucket, object, stored data and disk usage cards"
-            width="2560" height="1750" decoding="async" />
+            alt="Johnny web panel: dashboard with stored data, disk usage, largest buckets and recent transfers"
+            width="2560" height="2226" decoding="async" />
         </div>
       </div>
-      <p class="panel-caption" id="panelCaption">Dashboard — buckets, objects, stored data and disk usage at a glance</p>
-      <p class="panel-hint">Real screenshots from the local demo (<code>bash demo/up.sh</code>): Garage 2.4, ~1 GB of sample data.</p>
+      <p class="panel-caption" id="panelCaption">Dashboard — stored data, disk space, largest buckets and the latest transfers</p>
+      <p class="panel-hint">The 1.3 panel with sample data. Try it yourself with the local demo (<code>bash demo/up.sh</code>): Garage 2.4, ~1 GB of sample data.</p>
     </div>
   </section>
 
@@ -1200,10 +1227,11 @@
         <article class="doc-block" id="doc-panel">
           <h3>Web panel</h3>
           <p>
-            Optional Laravel panel: a storage dashboard, a file browser (folders, multi-file upload,
-            downloads, pagination), access keys with one-time credentials, per-bucket read / write /
-            owner permissions, TOTP two-factor authentication and API tokens. If you skipped it during
-            autoinstall:
+            Optional Laravel panel: a storage dashboard, a file browser with previews and share links,
+            bucket settings, scoped access keys, transfers and syncs with other providers, updates,
+            TOTP two-factor authentication and API tokens. One bar on top, light and dark, and
+            <code>Ctrl</code>/<code>⌘</code> <code>K</code> to jump to any page or bucket. If you
+            skipped it during autoinstall:
           </p>
           <div class="code-block">
             <div class="code-header">
@@ -1225,6 +1253,47 @@
           </div>
           <p style="margin-top:0.85rem">
             Open the panel hostname, sign in, then enable <strong>TOTP 2FA</strong> under Settings.
+          </p>
+
+          <h4>Access keys and scopes</h4>
+          <p>
+            A key works on the buckets you choose, or on <strong>all buckets</strong> (including the
+            ones created later), with one scope: <em>read only</em>, <em>read and write</em>,
+            <em>write only</em> or <em>full control</em>. Garage enforces read, write and owner and
+            nothing finer: a key that can write can also overwrite and delete.
+          </p>
+
+          <h4>Files</h4>
+          <p>
+            Drag files or whole folders onto a bucket: uploads go up in chunks and need no
+            <code>php.ini</code> changes. Click a file to preview it (images, video, audio, PDF, text),
+            rename or move it, or create a share link that expires in an hour, a day or a week.
+            Select several rows to delete them together; type the start of a name to filter.
+          </p>
+
+          <h4>Bucket settings</h4>
+          <p>
+            Each bucket has quotas (largest size, most objects), expiry rules (delete objects after a
+            number of days, optionally in one folder; clean up unfinished multipart uploads) and a
+            CORS rule for uploads straight from the browser. The Connect tab has ready-to-paste
+            configuration for Laravel, the AWS CLI, rclone, Python and Node.js.
+          </p>
+
+          <h4>Transfers and scheduled syncs</h4>
+          <p>
+            Add a connection to another S3 provider (AWS S3, Cloudflare R2, DigitalOcean Spaces,
+            Backblaze B2, Wasabi, Hetzner, Scaleway, MinIO, another Johnny) or to an
+            <strong>SFTP server</strong>, then import a bucket into Johnny or export one out: once, or
+            kept in sync on a schedule, from every minute to any number of minutes, hours or days.
+            Copy adds new and changed files; mirror also deletes what the source no longer has; a dry
+            run lists what would change. Transfers are run by rclone in the background, with live
+            progress and a log, and can be cancelled or started again.
+          </p>
+          <p style="margin-top:0.85rem">
+            With an SFTP server a bucket is synced with a folder, such as
+            <code>backups/media</code>; authenticate with a password or a private key. The server's
+            host key is pinned the first time it answers. Scheduled syncs rely on
+            <code>/etc/cron.d/johnny-panel</code>, which the panel installer and the updater set up.
           </p>
 
           <h4>SMTP for password reset</h4>
@@ -1263,7 +1332,7 @@
           </div>
           <p style="margin-top:0.85rem">
             The screenshots on this page come from that demo and are regenerated with
-            <code>node demo/screenshots.mjs</code>. Requirements: Garage 2.x, PHP 8.5, Composer and curl.
+            <code>node demo/screenshots.mjs</code>. Requirements: Garage 2.x, PHP 8.5 or 8.6, Composer and curl.
           </p>
         </article>
 
@@ -1368,7 +1437,8 @@
         <article class="doc-block" id="doc-api">
           <h3>Panel API</h3>
           <p>
-            Secured with Laravel Sanctum personal access tokens. Interactive docs at
+            38 JSON endpoints, secured with Laravel Sanctum personal access tokens: everything the
+            panel does with buckets, keys, connections, transfers and syncs. Interactive docs at
             <code>/api/docs</code>, OpenAPI at <code>/api/openapi.yaml</code>.
           </p>
           <div class="code-block">
@@ -1395,6 +1465,57 @@
   -d '{"bucket":"customer-orders"}'</pre>
           </div>
 
+          <h4>Buckets and their settings</h4>
+          <div class="table-wrap">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Path</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>GET / POST</td>
+                  <td><code>/api/buckets</code></td>
+                  <td>List buckets; create one</td>
+                </tr>
+                <tr>
+                  <td>GET / DEL</td>
+                  <td><code>/api/buckets/{bucket}</code></td>
+                  <td>Size, objects, quotas and keys with their scope; delete an empty bucket</td>
+                </tr>
+                <tr>
+                  <td>GET</td>
+                  <td><code>/api/buckets/{bucket}/settings</code></td>
+                  <td>Usage, quotas, CORS and expiry rules in one call</td>
+                </tr>
+                <tr>
+                  <td>PUT</td>
+                  <td><code>/api/buckets/{bucket}/quotas</code></td>
+                  <td>Largest size (bytes) and number of objects; <code>null</code> removes a limit</td>
+                </tr>
+                <tr>
+                  <td>PUT</td>
+                  <td><code>/api/buckets/{bucket}/cors</code></td>
+                  <td>Origins, methods, headers; an empty list removes the rule</td>
+                </tr>
+                <tr>
+                  <td>PUT</td>
+                  <td><code>/api/buckets/{bucket}/lifecycle</code></td>
+                  <td>Delete objects after N days, clean up unfinished uploads</td>
+                </tr>
+                <tr>
+                  <td>POST</td>
+                  <td><code>/api/buckets/provision</code></td>
+                  <td>Bucket + dedicated key (with a scope) + credentials in one call</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Keys and scopes</h4>
           <div class="table-wrap">
             <table class="docs-table">
               <thead>
@@ -1407,42 +1528,130 @@
               <tbody>
                 <tr>
                   <td>GET</td>
-                  <td><code>/api/buckets</code></td>
-                  <td>List buckets</td>
+                  <td><code>/api/scopes</code></td>
+                  <td><code>read</code>, <code>read-write</code>, <code>write</code>, <code>full</code> and the permissions behind each</td>
+                </tr>
+                <tr>
+                  <td>GET / POST</td>
+                  <td><code>/api/keys</code></td>
+                  <td>List keys; create one for chosen buckets, for all buckets, or for none yet</td>
+                </tr>
+                <tr>
+                  <td>GET / DEL</td>
+                  <td><code>/api/keys/{keyId}</code></td>
+                  <td>A key with its buckets and scopes; delete it</td>
+                </tr>
+                <tr>
+                  <td>PUT / DEL</td>
+                  <td><code>/api/keys/{keyId}/all-buckets</code></td>
+                  <td>One scope on every bucket, new ones included; or stop following new buckets</td>
                 </tr>
                 <tr>
                   <td>POST</td>
-                  <td><code>/api/buckets</code></td>
-                  <td>Create a bucket</td>
-                </tr>
-                <tr>
-                  <td>GET</td>
-                  <td><code>/api/buckets/{bucket}</code></td>
-                  <td>Metadata &amp; keys</td>
+                  <td><code>/api/buckets/{bucket}/keys</code></td>
+                  <td>Grant a key on a bucket: an exact <code>scope</code>, or read / write / owner flags</td>
                 </tr>
                 <tr>
                   <td>DEL</td>
-                  <td><code>/api/buckets/{bucket}</code></td>
-                  <td>Delete empty bucket</td>
-                </tr>
-                <tr>
-                  <td>GET / POST / DEL</td>
-                  <td><code>/api/keys</code></td>
-                  <td>List, create, lookup, delete keys</td>
-                </tr>
-                <tr>
-                  <td>POST / DEL</td>
-                  <td><code>/api/buckets/{b}/keys…</code></td>
-                  <td>Grant or revoke key access</td>
-                </tr>
-                <tr>
-                  <td>POST</td>
-                  <td><code>/api/buckets/provision</code></td>
-                  <td>Bucket + key + credentials in one call</td>
+                  <td><code>/api/buckets/{bucket}/keys/{keyId}</code></td>
+                  <td>Revoke permissions</td>
                 </tr>
               </tbody>
             </table>
           </div>
+
+          <h4>Connections, transfers and syncs</h4>
+          <div class="table-wrap">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Path</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>GET</td>
+                  <td><code>/api/providers</code></td>
+                  <td>Supported S3 providers, plus SFTP, and what each needs</td>
+                </tr>
+                <tr>
+                  <td>GET / POST</td>
+                  <td><code>/api/connections</code></td>
+                  <td>List connections; add an S3 account or an SFTP server</td>
+                </tr>
+                <tr>
+                  <td>GET / PUT / DEL</td>
+                  <td><code>/api/connections/{id}</code></td>
+                  <td>Read, change or delete a connection</td>
+                </tr>
+                <tr>
+                  <td>POST</td>
+                  <td><code>/api/connections/{id}/check</code></td>
+                  <td>Try the credentials</td>
+                </tr>
+                <tr>
+                  <td>GET</td>
+                  <td><code>/api/connections/{id}/buckets</code></td>
+                  <td>Buckets of the provider, or folders of the server</td>
+                </tr>
+                <tr>
+                  <td>GET / POST</td>
+                  <td><code>/api/transfers</code></td>
+                  <td>List transfers; start an import or an export</td>
+                </tr>
+                <tr>
+                  <td>GET / DEL</td>
+                  <td><code>/api/transfers/{id}</code></td>
+                  <td>Progress, counters and log; remove a finished transfer</td>
+                </tr>
+                <tr>
+                  <td>POST</td>
+                  <td><code>/api/transfers/{id}/cancel</code></td>
+                  <td>Cancel a waiting or running transfer</td>
+                </tr>
+                <tr>
+                  <td>POST</td>
+                  <td><code>/api/transfers/{id}/retry</code></td>
+                  <td>Run it again; turn a dry run into a real one</td>
+                </tr>
+                <tr>
+                  <td>GET / POST</td>
+                  <td><code>/api/syncs</code></td>
+                  <td>List scheduled syncs; create one with <code>interval_minutes</code></td>
+                </tr>
+                <tr>
+                  <td>GET / PUT / DEL</td>
+                  <td><code>/api/syncs/{id}</code></td>
+                  <td>A sync with its runs; change interval or mode, pause, resume, delete</td>
+                </tr>
+                <tr>
+                  <td>POST</td>
+                  <td><code>/api/syncs/{id}/run</code></td>
+                  <td>Run a sync now</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Keep a bucket in sync with an SFTP server</h4>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash</span>
+            </div>
+            <pre><span class="tok-cmd">curl</span> -sS -X POST "https://panel.example.com/api/syncs" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"direction":"export","connection_id":1,"local_bucket":"media",
+       "remote_bucket":"backups/media","mode":"copy","interval_minutes":15}'</pre>
+          </div>
+          <p style="margin-top:0.85rem">
+            Reads answer <code>{"data": …}</code>, errors <code>{"message", "detail"}</code>;
+            <code>422</code> is a validation error, <code>409</code> a resource in use. Objects themselves
+            are read and written with the S3 API, using an access key.
+          </p>
         </article>
 
         <article class="doc-block" id="doc-laravel">
@@ -1638,7 +1847,7 @@
             Source and issues:
             <a class="link-inline" href="https://github.com/andreapollastri/johnny" target="_blank"
               rel="noopener">github.com/andreapollastri/johnny</a>
-            · MIT License · v1.2.1
+            · MIT License · v2.0.0
           </p>
         </article>
       </div>
@@ -1648,7 +1857,7 @@
   <footer>
     <div>
       &copy; 2026 <a href="https://andreapollastri.net" target="_blank" rel="noopener" style="margin-left:0">Andrea
-        Pollastri</a> — MIT License · v1.2.1
+        Pollastri</a> — MIT License · v2.0.0
     </div>
     <div>
       <a href="https://github.com/andreapollastri/johnny" target="_blank" rel="noopener">GitHub</a>

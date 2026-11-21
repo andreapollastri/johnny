@@ -23,4 +23,22 @@ class FormatTest extends TestCase
         $this->assertSame('Oct 7, 2026', Format::date('2026-10-07', withTime: false));
         $this->assertSame('—', Format::date(null));
     }
+
+    public function test_duration_is_short_and_readable(): void
+    {
+        $this->assertSame('12s', Format::duration(12));
+        $this->assertSame('1m 35s', Format::duration(95));
+        $this->assertSame('1h 2m', Format::duration(3725));
+        $this->assertSame('0s', Format::duration(-4));
+    }
+
+    public function test_parse_bytes_reads_the_sizes_garage_and_php_print(): void
+    {
+        $this->assertSame(0, Format::parseBytes('0 B'));
+        $this->assertSame(1_048_576, Format::parseBytes('1048576'));
+        $this->assertSame(2 * 1024 ** 2, Format::parseBytes('2M'));
+        $this->assertSame(10 * 1024 ** 3, Format::parseBytes('10.0 GiB'));
+        $this->assertSame(535_717_478, Format::parseBytes('510.9 MiB'));
+        $this->assertNull(Format::parseBytes('plenty'));
+    }
 }

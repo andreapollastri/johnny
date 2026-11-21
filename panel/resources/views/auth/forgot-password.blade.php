@@ -24,10 +24,10 @@
             <label for="email">Email</label>
             <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus>
         </div>
-        <button type="submit">Send reset link</button>
+        <button type="submit" class="btn btn-primary">Send reset link</button>
     </form>
     <div class="auth-footer">
-        <a href="{{ route('login') }}">&larr; Back to sign in</a>
+        <a href="{{ route('login') }}">Back to sign in</a>
     </div>
 </div>
 @endsection

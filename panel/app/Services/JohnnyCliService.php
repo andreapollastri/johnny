@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\GlobalKey;
+use App\Support\Format;
+use App\Support\KeyScopes;
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
 
@@ -73,7 +76,18 @@ class JohnnyCliService
      */
     public function deleteKey(string $keyId): ProcessResult
     {
-        return $this->runJohnnyResult(['key', 'delete', '--yes', $keyId]);
+        $result = $this->runJohnnyResult(['key', 'delete', '--yes', $keyId]);
+
+        if ($result->successful()) {
+            try {
+                // A deleted key no longer reaches all buckets.
+                GlobalKey::query()->where('key_id', $keyId)->delete();
+            } catch (\Throwable) {
+                // The table is not there yet: the panel is being installed or migrated.
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -188,6 +202,71 @@ class JohnnyCliService
         return $keys;
     }
 
+    /**
+     * Size, object count and quotas of a bucket, straight from Garage's counters (no listing).
+     * `known` is false when `johnny bucket info` could not be run.
+     *
+     * @return array{known: bool, size: ?int, objects: ?int, max_size: ?int, max_objects: ?int}
+     */
+    public function bucketUsage(string $bucket): array
+    {
+        $result = $this->runJohnnyResult(['bucket', 'info', $bucket]);
+
+        return ['known' => $result->successful(), ...$this->parseBucketUsage($result->successful() ? $result->output() : '')];
+    }
+
+    /**
+     * Parse the counters of `garage bucket info`: "Size: 510.9 MiB (535.8 MB)", "Objects: 35" and,
+     * when quotas are set, "maximum size: 10.0 GiB (10.7 GB)" / "maximum number of objects: 1000".
+     * Sizes are what Garage prints, rounded to one decimal.
+     *
+     * @return array{size: ?int, objects: ?int, max_size: ?int, max_objects: ?int}
+     */
+    public function parseBucketUsage(string $raw): array
+    {
+        $number = fn (string $value) => (int) preg_replace('/\D/', '', $value);
+
+        return [
+            'size' => preg_match('/^\s*Size:\s*([^(\n]+)/mi', $raw, $m) ? Format::parseBytes(trim($m[1])) : null,
+            'objects' => preg_match('/^\s*Objects:\s*([\d,.]+)/mi', $raw, $m) ? $number($m[1]) : null,
+            'max_size' => preg_match('/maximum size:\s*([^(\n]+)/i', $raw, $m) ? Format::parseBytes(trim($m[1])) : null,
+            'max_objects' => preg_match('/maximum number of objects:\s*([\d,.]+)/i', $raw, $m) ? $number($m[1]) : null,
+        ];
+    }
+
+    /**
+     * Set both quotas of a bucket: bytes and number of objects; null removes that limit.
+     * Garage refuses uploads that would go over a quota.
+     */
+    public function setBucketQuotas(string $bucket, ?int $maxSize, ?int $maxObjects): ProcessResult
+    {
+        return $this->runJohnnyResult([
+            'bucket', 'set-quotas',
+            '--max-size', $maxSize === null ? 'none' : (string) $maxSize,
+            '--max-objects', $maxObjects === null ? 'none' : (string) $maxObjects,
+            $bucket,
+        ]);
+    }
+
+    /**
+     * Create the bucket when it does not exist yet, and make sure the system keys can use it.
+     * Returns an error message, or null when the bucket is ready.
+     */
+    public function ensureBucket(string $bucket): ?string
+    {
+        if (! in_array($bucket, $this->listAllBucketNamesFromGarage(), true)) {
+            $result = $this->createBucket($bucket);
+
+            if (! $result->successful()) {
+                return $this->errorDetail($result, "Bucket \"{$bucket}\" could not be created.");
+            }
+        }
+
+        $this->ensureDefaultSystemKeysOnBucket($bucket);
+
+        return null;
+    }
+
     public function resolveCanonicalKeyId(string $keyId): ?string
     {
         foreach ($this->listAllKeys() as $k) {
@@ -229,12 +308,31 @@ class JohnnyCliService
     }
 
     /**
-     * Grant the panel/app key (rw+owner) and the backup key (read) on a bucket.
+     * Grant the panel/app key (rw+owner) and the backup key (read) on a bucket, then the keys
+     * that reach every bucket.
      */
     public function ensureDefaultSystemKeysOnBucket(string $bucket): void
     {
         $this->allowKeyOnBucket(config('services.garage.key_name', 'johnny-default'), $bucket);
         $this->allowBackupKeyReadOnBucket($bucket);
+        $this->grantGlobalKeys($bucket);
+    }
+
+    /**
+     * Grant the keys that reach every bucket (see GlobalKey) on one bucket, usually a new one.
+     */
+    public function grantGlobalKeys(string $bucket): void
+    {
+        try {
+            $keys = GlobalKey::query()->get();
+        } catch (\Throwable) {
+            // The table is not there yet: the panel is being installed or migrated.
+            return;
+        }
+
+        foreach ($keys as $key) {
+            $this->bucketAllow($bucket, $key->key_id, ...KeyScopes::flags($key->scope));
+        }
     }
 
     /**
@@ -354,6 +452,86 @@ class JohnnyCliService
     public function bucketDeny(string $bucket, string $keyId, bool $read, bool $write, bool $owner): ProcessResult
     {
         return $this->runJohnnyResult($this->permissionArgs('deny', $bucket, $keyId, $read, $write, $owner));
+    }
+
+    /**
+     * Give a key exactly the permissions of a scope on a bucket: grants what the scope includes
+     * and revokes the rest. Callers must pass a canonical key id (see resolveCanonicalKeyId).
+     */
+    public function setKeyScope(string $bucket, string $keyId, string $scope): ProcessResult
+    {
+        [$read, $write, $owner] = KeyScopes::flags($scope);
+
+        $result = $this->bucketAllow($bucket, $keyId, $read, $write, $owner);
+
+        if ($result->successful() && ! ($read && $write && $owner)) {
+            $result = $this->bucketDeny($bucket, $keyId, ! $read, ! $write, ! $owner);
+        }
+
+        return $result;
+    }
+
+    /**
+     * The buckets a key can use, from `garage key info`. `known` is false when it could not run.
+     *
+     * @return array{known: bool, buckets: list<array{bucket: string, permissions: string}>, raw: string}
+     */
+    public function keyInfo(string $keyId): array
+    {
+        $result = $this->runJohnnyResult(['key', 'info', $keyId]);
+
+        if (! $result->successful()) {
+            return ['known' => false, 'buckets' => [], 'raw' => ''];
+        }
+
+        return [
+            'known' => true,
+            'buckets' => $this->parseKeyInfoBuckets($result->output()),
+            'raw' => $result->output(),
+        ];
+    }
+
+    /**
+     * Rows of the "BUCKETS FOR THIS KEY" table: "RW   f1b17fa555341ee2  media". The three letters
+     * keep their column, so a write-only row starts with a space (" W").
+     *
+     * @return list<array{bucket: string, permissions: string}>
+     */
+    public function parseKeyInfoBuckets(string $raw): array
+    {
+        $rows = [];
+        $inTable = false;
+
+        foreach (explode("\n", $raw) as $line) {
+            if (str_contains($line, 'BUCKETS FOR THIS KEY')) {
+                $inTable = true;
+
+                continue;
+            }
+
+            if (! $inTable || ! preg_match('/^(.*?)\s+([0-9a-f]{16,64})\s+(\S+)/i', ' '.$line, $m)) {
+                continue;
+            }
+
+            $flags = strtoupper((string) preg_replace('/\s+/', '', $m[1]));
+
+            if ($flags === '' || ! preg_match('/^[RWO]+$/', $flags)) {
+                continue;
+            }
+
+            $rows[] = [
+                'bucket' => explode(',', $m[3])[0],
+                'permissions' => implode(', ', array_values(array_filter([
+                    str_contains($flags, 'R') ? 'read' : null,
+                    str_contains($flags, 'W') ? 'write' : null,
+                    str_contains($flags, 'O') ? 'owner' : null,
+                ]))),
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => strnatcasecmp($a['bucket'], $b['bucket']));
+
+        return $rows;
     }
 
     /**

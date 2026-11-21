@@ -1,14 +1,57 @@
-# Johnny
+<h1 align="center">Johnny</h1>
 
-**Self-hosted S3-compatible object storage, automated backups, and an elegant web panel — in one install.**
+<p align="center">
+  <strong>Your own S3. One command to install, a clean panel to run it, nothing to rent.</strong>
+</p>
 
-Johnny wraps [Garage](https://garagehq.deuxfleurs.fr/) with production-ready automation: TLS via Caddy, nightly SFTP backups with retention, a `johnny` CLI, and an optional Laravel web panel with two-factor authentication.
+<p align="center">
+  Self-hosted, S3-compatible object storage for a single VPS: <a href="https://garagehq.deuxfleurs.fr/">Garage</a> underneath,<br>
+  HTTPS, nightly backups, self-updates, a JSON API and a web panel on top.
+</p>
 
-> **Current release:** see [`VERSION`](VERSION) &middot; **License:** [MIT](LICENSE) &middot; **Website:** [johnny.web.ap.it](https://johnny.web.ap.it)
+<p align="center">
+  <a href="https://johnny.web.ap.it"><strong>Website</strong></a> ·
+  <a href="#quick-start-autoinstall"><strong>Install</strong></a> ·
+  <a href="#web-panel"><strong>Panel</strong></a> ·
+  <a href="#panel-api"><strong>API</strong></a> ·
+  <a href="#local-demo"><strong>Local demo</strong></a> ·
+  <a href="VERSION">Version</a> ·
+  <a href="LICENSE">MIT</a>
+</p>
 
 ![Johnny web panel — storage dashboard](docs/img/dashboard.jpg)
 
-<sub>All screenshots are taken from the [local demo](#local-demo): a real Garage 2.4 node with ~1 GB of sample data.</sub>
+```bash
+git clone https://github.com/andreapollastri/johnny.git /opt/johnny
+sudo bash /opt/johnny/scripts/autoinstall.sh
+```
+
+Point any S3 client at it — the AWS CLI and SDKs, Laravel's `s3` disk, rclone, boto3 — and manage the rest from the browser.
+
+## Why Johnny
+
+- **It is just S3.** Garage speaks the S3 API, so the tools you already use keep working. No lock-in, no per-GB bill.
+- **It looks after itself.** TLS certificates, nightly SFTP backups with retention, nightly updates of Johnny and of the server, automatic rollback when an update does not answer.
+- **A panel you will actually open.** Browse and preview files, share a link, set quotas and expiry rules, hand out scoped keys, watch a transfer run.
+- **Data moves in and out.** Import buckets from AWS S3, R2, Spaces, B2 and any S3 provider, export to them or to an SFTP server, or keep the two in sync every minute.
+- **Everything is scriptable.** A `johnny` CLI on the server and a JSON API with one-call tenant provisioning.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/img/objects.jpg" alt="File browser"><br><sub><b>File browser</b> — folders, drag and drop, resumable uploads, bulk actions</sub></td>
+    <td width="50%"><img src="docs/img/preview.jpg" alt="File preview"><br><sub><b>Preview and share</b> — images, video, audio, PDF, text; links that expire</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/transfers.jpg" alt="Transfers and syncs"><br><sub><b>Transfers</b> — import, export and scheduled syncs with other providers</sub></td>
+    <td><img src="docs/img/keys.jpg" alt="Access keys"><br><sub><b>Access keys</b> — per bucket or for all buckets, each with one scope</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/bucket-settings.jpg" alt="Bucket settings"><br><sub><b>Bucket settings</b> — quotas, expiry rules, CORS</sub></td>
+    <td><img src="docs/img/dashboard-dark.jpg" alt="Dark mode"><br><sub><b>Dark mode</b> — follows the system, or the toggle in the bar</sub></td>
+  </tr>
+</table>
+
+<sub>Screenshots show the 2.0 panel with sample data. `node demo/screenshots.mjs` takes them again from the [local demo](#local-demo), a real Garage node.</sub>
 
 ---
 
@@ -19,10 +62,11 @@ Johnny wraps [Garage](https://garagehq.deuxfleurs.fr/) with production-ready aut
 | **S3-compatible storage** | Powered by Garage — use any AWS SDK, `aws` CLI, or S3 client |
 | **One-command install** | Single script sets up Garage, Caddy (Let's Encrypt TLS), rclone, cron |
 | **Automated SFTP backups** | Nightly sync of every bucket to one or more remote servers, with configurable retention |
-| **Web panel** | Storage dashboard, file browser (folders, multi-upload, pagination), access keys and per-bucket permissions (optional) |
-| **Provisioning API** | Authenticated HTTP endpoint to create a bucket, a dedicated Garage key, and return S3 connection details (optional panel) |
+| **Web panel** | Dashboard, file browser with previews and share links, bucket quotas / expiry / CORS, scoped access keys, transfers (optional) |
+| **Panel API** | 38 JSON endpoints with an OpenAPI spec: buckets and their settings, keys and scopes, connections, transfers, syncs, one-call tenant provisioning |
 | **Two-factor auth** | TOTP 2FA + password reset via SMTP on the web panel |
 | **Self-updating** | Nightly cron installs the latest release, runs migrations, and refreshes the panel |
+| **Import, export, sync** | Move buckets from and to other S3 providers and SFTP servers, once or on a schedule (every minute and up) |
 | **Local demo** | `bash demo/up.sh` boots Garage, seeds sample data and serves the panel on your laptop |
 
 ---
@@ -79,7 +123,7 @@ The interactive wizard will:
 4. Configure **Caddy** with automatic TLS for your S3 domain
 5. Create `/etc/johnny/backup.json` (retention: 90 days, empty targets)
 6. Install `/etc/cron.d/johnny-nightly` (server packages at 02:00, Johnny update at 02:30, backup at 03:00 — see [Updating](#updating))
-7. Optionally install the **web panel** (PHP 8.5-FPM, Composer, Laravel migrate, Caddy vhost)
+7. Optionally install the **web panel** (PHP 8.6-FPM, Composer, Laravel migrate, Caddy vhost)
 
 Once complete, load your app credentials:
 
@@ -104,18 +148,39 @@ Then configure TLS yourself — see `config/caddy-johnny.caddy.example` or `conf
 
 ## Web Panel
 
-The optional Laravel panel provides a browser-based interface to manage **buckets**, **objects**, and **Garage API keys**.
+The optional Laravel panel is a quiet, keyboard-friendly interface to everything on the node: **buckets**, **objects**, **access keys**, and **transfers** to and from other providers. One bar on top, light and dark, no build step.
 
 | | |
 |---|---|
 | ![Buckets](docs/img/buckets.jpg) | ![File browser](docs/img/objects.jpg) |
-| **Buckets** — create, filter, delete (the `default` bucket is protected) | **File browser** — folders, multi-file upload, downloads, pagination |
-| ![Bucket permissions](docs/img/permissions.jpg) | ![Access keys](docs/img/keys.jpg) |
-| **Permissions** — grant read / write / owner per bucket | **Access keys** — new credentials are shown once, ready to copy |
-| ![Settings](docs/img/settings.jpg) | ![Dark mode](docs/img/dashboard-dark.jpg) |
-| **Settings** — TOTP 2FA and Sanctum API tokens | **Dark mode** — follows the system or the header toggle |
+| **Buckets** — create, filter, delete (the `default` bucket is protected) | **Objects** — folders, drag and drop of files and folders, resumable uploads, bulk delete |
+| ![Preview](docs/img/preview.jpg) | ![Bucket settings](docs/img/bucket-settings.jpg) |
+| **Preview and share** — images, video, audio, PDF and text; rename, move, share links up to 7 days | **Settings** — quotas (size, objects), expiry rules, CORS |
+| ![Bucket access](docs/img/permissions.jpg) | ![Access keys](docs/img/keys.jpg) |
+| **Bucket access** — a new key for this bucket, or a scope for an existing one | **Access keys** — credentials shown once, with ready-to-paste snippets |
+| ![Key page](docs/img/key.jpg) | ![Transfers](docs/img/transfers.jpg) |
+| **A key** — its buckets and scopes, or one scope on all buckets | **Transfers** — connections, scheduled syncs, history |
+| ![New transfer](docs/img/transfer-new.jpg) | ![A sync](docs/img/sync.jpg) |
+| **New transfer** — in or out, copy or mirror, once or kept in sync | **A sync** — schedule, pause, run now, latest runs |
+| ![A running transfer](docs/img/transfer.jpg) | ![SFTP connection](docs/img/sftp.jpg) |
+| **A transfer** — live progress, speed, log, cancel | **Connections** — S3 providers and SFTP servers |
+| ![Jump to](docs/img/palette.jpg) | ![Updates](docs/img/updates.jpg) |
+| **Jump to…** — `Ctrl`/`⌘` + `K` or `/`: any page or bucket by name | **Updates** — channel, nightly updates, server packages |
+| ![Settings](docs/img/settings.jpg) | ![Sign in](docs/img/login.jpg) |
+| **Settings** — TOTP 2FA and API tokens | **Sign in** — password reset by email, two-factor challenge |
 
-The **Updates** page (arrow icon in the header) shows the installed version and lets you check, start and configure updates of Johnny and of the server's packages — see [Updating](#updating). The panel has no roles: every signed-in user is an administrator and can use it.
+What the panel does, page by page:
+
+- **Dashboard** — stored data, disk space, largest buckets, latest transfers.
+- **Buckets → Objects** — folders, drag and drop of files and folders, resumable uploads in chunks (no `php.ini` limits to raise), previews (images, video, audio, PDF, text), rename/move, bulk delete, temporary share links (presigned URLs, up to 7 days), filter by name prefix.
+- **Buckets → Access keys** — create a key for one bucket, or grant an existing key a scope there.
+- **Buckets → Settings** — quotas (size, object count), expiry rules (delete after N days, abort incomplete multipart uploads), CORS.
+- **Buckets → Connect** — ready-to-paste configuration for Laravel, AWS CLI, rclone, Python and Node.js.
+- **Access keys** — keys for chosen buckets or for all buckets, each with one scope — see [Access keys and scopes](#access-keys-and-scopes).
+- **Transfers** — import and export buckets from and to other S3 providers and SFTP servers, once or on a schedule — see [Transfers and scheduled syncs](#transfers-and-scheduled-syncs).
+- **Jump to…** (`Ctrl`/`⌘` + `K`, or `/`) — go to any page or bucket by typing its name.
+
+The **Updates** page (arrow icon in the bar) shows the installed version and lets you check, start and configure updates of Johnny and of the server's packages — see [Updating](#updating). The panel has no roles: every signed-in user is an administrator and can use it.
 
 ### Install the Panel
 
@@ -125,7 +190,7 @@ If you chose to skip the panel during autoinstall, you can add it later:
 sudo bash scripts/install-panel.sh /opt/johnny https://panel.example.com
 ```
 
-The script installs PHP 8.5-FPM, Composer, runs Laravel migrations and caches, and wires the Garage credentials from `/etc/johnny/credentials/default-s3.env` into `panel/.env`.
+The script installs PHP 8.6-FPM, Composer, runs Laravel migrations and caches, and wires the Garage credentials from `/etc/johnny/credentials/default-s3.env` into `panel/.env`.
 
 See `config/caddy-panel.caddy.example` for the Caddy vhost configuration.
 
@@ -141,6 +206,10 @@ Besides the Laravel defaults, `panel/.env` supports:
 | `GARAGE_DATA_DIR` | `/var/lib/johnny/data` | Filesystem shown in the dashboard disk gauge |
 | `JOHNNY_CLI_BINARY` | `/usr/local/bin/johnny` | CLI used for buckets, keys and permissions |
 | `JOHNNY_CLI_SUDO_USER` | `johnny` | Run the CLI as this user via `sudo -n`; empty to call it directly |
+| `GARAGE_INTERNAL_ENDPOINT` | *(empty)* | Endpoint rclone uses for the Johnny side of a transfer, e.g. `http://127.0.0.1:3900` to skip the reverse proxy; empty uses `GARAGE_ENDPOINT` |
+| `JOHNNY_RCLONE_BINARY` | `rclone` | rclone binary that runs transfers and syncs |
+| `JOHNNY_PHP_BINARY` | *(detected)* | PHP CLI that runs a transfer in the background; set it when the web server's PHP is not the one on the `PATH` |
+| `JOHNNY_TRANSFER_CONCURRENCY` | `2` | Transfers running at the same time; the others wait their turn |
 | `JOHNNY_UPDATE_STATE` | `/var/lib/johnny-update/state.json` | State of the updater, read by the **Updates** page |
 | `JOHNNY_UPDATE_SUDO` | `true` | Run `johnny update …` through `sudo -n` (as root); `false` calls it directly |
 | `JOHNNY_VERSION_FILE` | `../VERSION` | Version shown as *Installed* on the **Updates** page |
@@ -155,7 +224,49 @@ Dashboard statistics require listing every object, so they are cached for 60 sec
 sudo -u www-data php /opt/johnny/panel/artisan johnny:admin you@example.com 'strong-password'
 ```
 
-Open `https://<panel-hostname>` and sign in. Open **Settings** (gear in the header) to enable **two-factor authentication** (TOTP).
+Open `https://<panel-hostname>` and sign in. Open **Settings** (account menu, top right) to enable **two-factor authentication** (TOTP).
+
+### Access keys and scopes
+
+A key gets one **scope** on each bucket it can use:
+
+| Scope | Garage permissions | What the key can do |
+|---|---|---|
+| Read only | `read` | List and download objects |
+| Read and write | `read` + `write` | List, download, upload, overwrite and delete objects |
+| Write only | `write` | Upload, overwrite and delete, without reading back |
+| Full control | `read` + `write` + `owner` | Everything above, plus bucket settings (CORS, expiry rules) and deleting the bucket |
+
+Garage enforces `read`, `write` and `owner` and nothing finer: there is no permission to allow uploads but forbid overwriting or deleting. To protect files from removal, hand out read-only keys.
+
+A key works on:
+
+- **Selected buckets** — picked when the key is created (**Access keys**), or from a bucket's **Access keys** tab, which can also create a key for that bucket alone.
+- **All buckets** — a *global* key. Garage has no such notion, so the panel records the key and grants it on every bucket: the existing ones at once, new ones when they are created from the panel or the API. Buckets created elsewhere (the CLI, an S3 client) are picked up within five minutes by the scheduler, or right away with `php artisan johnny:keys:apply` (`--all` grants on every bucket again).
+
+The page of a key lists its buckets and lets you change the scope, bucket by bucket or for all buckets at once.
+
+### Transfers and scheduled syncs
+
+**Transfers** copies buckets between Johnny and any other S3 provider (AWS S3, Cloudflare R2, DigitalOcean Spaces, Backblaze B2, Wasabi, Hetzner, Scaleway, MinIO, another Johnny, or any S3-compatible endpoint), or an **SFTP server** (a VPS, a NAS, a storage box), where a bucket is synced with a folder:
+
+1. **Add a connection** — endpoint, region and access key of the other provider; or host, port, user and a password or private key for an SFTP server. Secrets are stored encrypted and never shown again. The host key of an SFTP server is pinned the first time it answers: a different server at the same address is refused until you save the connection again.
+2. **New transfer** — direction (**in**: import into Johnny, **out**: export from Johnny), the two buckets, optionally one folder, and **Copy** (add new and changed files) or **Mirror** (also delete what the source no longer has). A **dry run** lists what would change without touching anything. Several buckets of a provider can be imported at once from the connection's page.
+3. **When** — *Once, now*, or **Keep in sync**: the transfer repeats every minute, 5/15/30 minutes, hour, 6/12 hours, day, week, or any number of minutes, hours or days. Runs of the same sync never overlap; a sync can be paused, run on demand, changed or deleted from its page.
+
+With an SFTP server, the other side of a transfer is a path: `backups/media` (inside the folder the user lands in) or `/srv/backups/media`; folders that do not exist are created. Files are compared by size and checksum; a server that cannot hash files (no shell access) is compared by size alone.
+
+Transfers are run by [rclone](https://rclone.org/) in the background (data goes from one provider to the other through the server, not through your browser), so you can close the page; progress, speed and the log are shown live, and a transfer can be cancelled or started again (files already copied are skipped).
+
+SFTP connections also use `ssh-keyscan` (package `openssh-client`, installed by autoinstall) to read the server's host key.
+
+Scheduled syncs need the panel's scheduler, `/etc/cron.d/johnny-panel`:
+
+```cron
+* * * * * www-data php /opt/johnny/panel/artisan schedule:run >/dev/null 2>&1
+```
+
+`scripts/install-panel.sh` installs it, and migration `009` adds it to servers updated from 1.2.x. Without it, syncs only start while a Transfers page is open, and the page says so.
 
 ### API Keys via the Panel
 
@@ -170,6 +281,8 @@ The Keys page calls `sudo -u johnny johnny key list` under the hood. `/etc/sudoe
 sudo visudo -cf config/johnny-panel.sudoers.example
 sudo install -m 0440 config/johnny-panel.sudoers.example /etc/sudoers.d/johnny-panel
 ```
+
+<a id="panel-api"></a>
 
 ### Provisioning API
 
@@ -190,8 +303,6 @@ Accept: application/json
 
 **Interactive docs (no token required):** open `GET /api/docs` in a browser for Swagger UI. The machine-readable OpenAPI 3 spec is at `GET /api/openapi.yaml`.
 
-![Swagger UI for the panel API](docs/img/api.jpg)
-
 **Endpoint:** `POST /api/buckets/provision`  
 Use your panel base URL, for example `https://panel.example.com/api/buckets/provision`.
 
@@ -200,8 +311,9 @@ Use your panel base URL, for example `https://panel.example.com/api/buckets/prov
 | Field | Type | Description |
 |---|---|---|
 | `bucket` | string, optional | Bucket name. Must match `^[a-z0-9][a-z0-9._-]{1,254}$`. If omitted, a unique name is generated (prefix `b-` plus random hex). |
+| `scope` | string, optional | What the dedicated key may do in its bucket: `read`, `read-write`, `write` or `full` (default `full`: read, write and owner). |
 
-Example body: `{}` or `{"bucket":"my-tenant-data"}`.
+Example body: `{}`, `{"bucket":"my-tenant-data"}` or `{"bucket":"reports","scope":"read-write"}`.
 
 **Success (HTTP 201):** the response is a JSON object including:
 
@@ -212,10 +324,11 @@ Example body: `{}` or `{"bucket":"my-tenant-data"}`.
 | `endpoint` | Public S3 URL from `GARAGE_ENDPOINT` (same as app-facing HTTPS endpoint) |
 | `path_style` | `true` — use path-style addressing for S3 clients |
 | `key_name` | Garage key name: `{bucket}-{random hex}` (bucket prefix truncated to fit Garage limits) |
+| `scope` | The scope the key got on the bucket |
 | `credentials` | `access_key_id` and `secret_access_key` for S3 |
 | `env` | Convenience map: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` |
 
-The server creates the bucket, creates the key, grants that key read/write/owner on the bucket, and grants the panel’s Garage key (`GARAGE_KEY_NAME`, default `johnny-default`) full access so the UI can manage the bucket.
+The server creates the bucket, creates the key, grants that key its scope on the bucket (read/write/owner by default), and grants the panel’s Garage key (`GARAGE_KEY_NAME`, default `johnny-default`) full access so the UI can manage the bucket.
 
 **Errors:** validation failures return **422** with `message` and `detail`. Other failures may return **422** (bucket creation) or **500** (key creation or permission steps) with a JSON body describing the problem.
 
@@ -231,24 +344,71 @@ curl -sS -X POST "https://panel.example.com/api/buckets/provision" \
 
 **Requirements:** the panel database must include Sanctum’s `personal_access_tokens` table (run `php artisan migrate` after upgrades). PHP must be allowed to run `sudo -u johnny /usr/local/bin/johnny` as for the rest of the panel (see **API Keys via the Panel** above).
 
-### Bucket, key, and permission APIs
+### Panel API reference
 
-Same **Sanctum** authentication as provisioning (`Authorization: Bearer …`, `Accept: application/json`).
+Same **Sanctum** authentication as provisioning (`Authorization: Bearer …`, `Accept: application/json`). The full contract, with every field and response, is the OpenAPI spec served at `/api/openapi.yaml` and rendered by Swagger UI at `/api/docs`.
+
+Reads answer `{"data": …}`, errors `{"message": "…", "detail": "…"}`. `422` is a validation error, `409` a resource that is busy or in use, `404` an unknown bucket, key or id. Sizes are bytes, intervals minutes, dates ISO 8601.
+
+**Buckets and their settings**
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/buckets` | List buckets (S3 `ListBuckets`). |
-| `POST` | `/api/buckets` | Create a bucket. JSON body: `{"name":"my-bucket"}` (same name rules as the UI). |
-| `GET` | `/api/buckets/{bucket}` | Bucket metadata from S3 plus `johnny bucket info` (`keys`, optional `info_raw`). |
+| `POST` | `/api/buckets` | Create a bucket: `{"name":"my-bucket"}`. System keys and keys for all buckets are granted on it. |
+| `GET` | `/api/buckets/{bucket}` | Size, object count, quotas and the keys that can use the bucket, each with its `scope`. |
 | `DELETE` | `/api/buckets/{bucket}` | Delete an empty bucket (the `default` bucket is protected). |
-| `GET` | `/api/keys` | List Garage keys (system keys `johnny-default` / `johnny-backup` are omitted, as in the UI). |
-| `POST` | `/api/keys` | Create a key. Body: `{"name":"my-key"}`. Response includes `id`, `credentials`, and optional `raw_output`. |
-| `GET` | `/api/keys/{keyId}` | Lookup one key by id (`GK…`, exact match — id prefixes return **404**). System keys return **403**. |
-| `DELETE` | `/api/keys/{keyId}` | Delete a key (system keys **403**). |
-| `POST` | `/api/buckets/{bucket}/keys` | Grant permissions. Body: `{"key_id":"GK…","read":true,"write":false,"owner":false}` (at least one of `read` / `write` / `owner` must be true). |
-| `DELETE` | `/api/buckets/{bucket}/keys/{keyId}` | Revoke permissions. Send the same boolean flags as the panel revoke form (query string or JSON body; at least one true). System keys return **403**. |
+| `GET` | `/api/buckets/{bucket}/settings` | Usage, quotas, CORS rule and expiry rules in one call. |
+| `PUT` | `/api/buckets/{bucket}/quotas` | `{"max_size": 10737418240, "max_objects": null}` — bytes and a count; `null` removes a limit. |
+| `PUT` | `/api/buckets/{bucket}/cors` | `{"origins":["https://app.example.com"],"methods":["GET","PUT"]}`; an empty `origins` removes the rule. |
+| `PUT` | `/api/buckets/{bucket}/lifecycle` | `{"expire_days": 30, "expire_prefix": "tmp/", "abort_days": 7}`; `null` turns a rule off. |
 
-Garage does not support renaming buckets or keys; there are no `PUT`/`PATCH` routes for those resources.
+**Keys and scopes**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/scopes` | The scopes (`read`, `read-write`, `write`, `full`) and the Garage permissions behind each. |
+| `GET` | `/api/keys` | List keys, with `all_buckets` and `scope` for the global ones (system keys are omitted). |
+| `POST` | `/api/keys` | Create a key and grant it in one call: `{"name":"reports","access":"buckets","scope":"read","buckets":["media"]}`, or `"access":"all"` for every bucket. The secret is returned once. |
+| `GET` | `/api/keys/{keyId}` | One key by exact id, with the buckets it can use and their scopes. System keys return **403**. |
+| `DELETE` | `/api/keys/{keyId}` | Delete a key (system keys **403**). |
+| `PUT` | `/api/keys/{keyId}/all-buckets` | `{"scope":"read"}` — exactly this scope on every bucket, new ones included. |
+| `DELETE` | `/api/keys/{keyId}/all-buckets` | Stop granting the key on new buckets; what it has stays. |
+| `POST` | `/api/buckets/{bucket}/keys` | Grant a key on one bucket: `{"key_id":"GK…","scope":"read-write"}` (exact), or `read` / `write` / `owner` flags (added to what it has). |
+| `DELETE` | `/api/buckets/{bucket}/keys/{keyId}` | Revoke permissions: pass the flags to remove (query string or JSON body). System keys return **403**. |
+
+**Connections, transfers and syncs**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/providers` | Supported providers and what each needs (endpoint, region, path-style). |
+| `GET` `POST` | `/api/connections` | List connections; add one (S3 account or SFTP server). Secrets are never returned. |
+| `GET` `PUT` `DELETE` | `/api/connections/{id}` | Read, change or delete a connection (**409** while a transfer or a sync uses it). |
+| `POST` | `/api/connections/{id}/check` | Try the credentials: `{"reachable": true, "error": null}`. |
+| `GET` | `/api/connections/{id}/buckets` | The buckets of the provider, or the folders of the SFTP server. |
+| `GET` `POST` | `/api/transfers` | List transfers (`?status=`, `?sync_id=`, `?limit=`); start an import or an export. |
+| `GET` `DELETE` | `/api/transfers/{id}` | Progress, counters and log (poll while `active` is true); remove a finished one. |
+| `POST` | `/api/transfers/{id}/cancel` | Cancel a waiting or running transfer. |
+| `POST` | `/api/transfers/{id}/retry` | Run it again; `{"for_real": true}` turns a dry run into a real one. |
+| `GET` `POST` | `/api/syncs` | List scheduled syncs (with `scheduler_running`); create one with `interval_minutes`. |
+| `GET` `PUT` `DELETE` | `/api/syncs/{id}` | A sync with its latest runs; change `interval_minutes` / `mode`, pause or resume with `enabled`; delete. |
+| `POST` | `/api/syncs/{id}/run` | Run a sync now (**409** while a run is in progress). |
+
+Start a sync out to an SFTP server and follow its first run:
+
+```bash
+API=https://panel.example.com/api; AUTH="Authorization: Bearer $TOKEN"
+
+curl -s -X POST "$API/connections" -H "$AUTH" -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -d '{"name":"Office NAS","provider":"sftp","host":"nas.example.com","username":"backup","password":"…"}'
+
+curl -s -X POST "$API/syncs" -H "$AUTH" -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -d '{"direction":"export","connection_id":1,"local_bucket":"media","remote_bucket":"backups/media","mode":"copy","interval_minutes":15}'
+
+curl -s "$API/syncs/1" -H "$AUTH" -H 'Accept: application/json'   # .data.runs[0].status
+```
+
+Objects themselves are read and written with the S3 API of the storage endpoint, using an access key. Garage does not support renaming buckets or keys; there are no routes for that.
 
 ---
 
@@ -273,6 +433,7 @@ cd panel
 composer install
 composer test              # PHPUnit: CLI parsers (real Garage 2.4 output), web UI, API, security guards
 vendor/bin/pint            # code style
+php artisan schedule:work  # scheduled syncs and global keys, without cron
 cd .. && python3 -m unittest discover -s scripts/tests
 ```
 
@@ -370,6 +531,10 @@ SYSTEM_UPDATE=1         # server packages, nightly at 02:00
 SYSTEM_REBOOT=0         # 1: reboot 5 minutes after a nightly server update that needs it
 JOHNNY_REPO=https://github.com/andreapollastri/johnny.git
 ```
+
+**From 1.2.x — nothing to do.** The update that installs 2.0 migrates the panel's database (connections, transfers, syncs, global keys) and runs two migrations: `009` installs `/etc/cron.d/johnny-panel` where the panel is installed, `010` moves the panel to **PHP 8.6**. Existing keys, buckets and permissions are not touched.
+
+The PHP switch (`scripts/switch-php.sh`) installs PHP 8.6 next to 8.5 with the same extensions, carries the FPM pools over, checks that the panel boots on 8.6, then points Caddy and the `php` command at it and stops the PHP 8.5 FPM (its packages stay). If any step fails the panel stays on PHP 8.5, which 2.0 still supports, and the update goes on; run the switch again by hand with `sudo bash /opt/johnny/scripts/switch-php.sh /opt/johnny 8.6`.
 
 **From 1.1.x — nothing to do.** Existing servers move over on their own on the next nightly run: the old line `johnny update --pull` (02:30) pulls `main` one last time, and its install steps run the new migration `008`, which:
 
@@ -501,6 +666,7 @@ sudo bash scripts/replicate-run.sh config/replication/media-to-eu.env
 | `/var/backups/johnny/` | Panel database backups taken before each update (newest 5) |
 | `/var/log/johnny-update.log` | Update log (Johnny and server updates) |
 | `/etc/cron.d/johnny-nightly` | Cron schedule (server update 02:00, Johnny update 02:30, backup 03:00) |
+| `/etc/cron.d/johnny-panel` | The panel's scheduler, every minute: scheduled syncs and keys for all buckets |
 | `/etc/sudoers.d/johnny-panel` | What the panel may run: the Garage CLI as `johnny`, the update commands as root |
 | `panel/.env` | Laravel panel environment (see [Panel Environment](#panel-environment)) |
 

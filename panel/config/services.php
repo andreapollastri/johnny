@@ -43,6 +43,9 @@ return [
         'key_name' => env('GARAGE_KEY_NAME', 'johnny-default'),
         // Filesystem holding Garage data blocks; used for the dashboard disk gauge.
         'data_dir' => env('GARAGE_DATA_DIR', '/var/lib/johnny/data'),
+        // S3 URL rclone uses for imports and exports run on this server (e.g. http://127.0.0.1:3900,
+        // which skips Caddy and TLS). Empty: the public GARAGE_ENDPOINT.
+        'internal_endpoint' => env('GARAGE_INTERNAL_ENDPOINT'),
     ],
 
     'johnny' => [
@@ -59,6 +62,16 @@ return [
             'sudo' => (bool) env('JOHNNY_UPDATE_SUDO', true),
             'version_file' => env('JOHNNY_VERSION_FILE', base_path('../VERSION')),
             'repository' => env('JOHNNY_REPOSITORY_URL', 'https://github.com/andreapollastri/johnny'),
+        ],
+
+        // Imports and exports: each transfer is one rclone process, started by `artisan johnny:transfer`
+        // as a detached process of the PHP-FPM user. No queue worker is needed.
+        'transfers' => [
+            'rclone' => env('JOHNNY_RCLONE_BINARY', 'rclone'),
+            // PHP CLI binary that runs artisan; empty: found next to the running PHP.
+            'php' => env('JOHNNY_PHP_BINARY'),
+            // Transfers running at the same time; the others wait their turn.
+            'concurrency' => (int) env('JOHNNY_TRANSFER_CONCURRENCY', 2),
         ],
     ],
 
