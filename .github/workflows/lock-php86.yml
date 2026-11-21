@@ -1,0 +1,24 @@
+# Temporary: refresh composer.lock for PHP 8.6 and print the result. Removed once committed.
+name: Lock for PHP 8.6
+on:
+  push:
+    branches: [feature/panel-1.3]
+    paths: [.github/workflows/lock-php86.yml]
+permissions:
+  contents: read
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: panel
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.6'
+          extensions: mbstring, pdo_sqlite, sqlite3, intl, bcmath
+          coverage: none
+      - run: composer update --no-interaction --no-progress --with-all-dependencies --minimal-changes nette/schema nette/utils league/config
+      - run: composer install --no-interaction --no-progress --dry-run
+      - run: git diff --stat composer.lock && echo '=====LOCK-BEGIN=====' && base64 -w0 composer.lock && echo && echo '=====LOCK-END====='

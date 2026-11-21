@@ -230,7 +230,7 @@ class TransfersApiTest extends TestCase
         $this->getJson("/api/transfers/{$transfer->id}")
             ->assertOk()
             ->assertJsonPath('data.status', 'running')
-            ->assertJsonPath('data.percent', 25.0)
+            ->assertJsonPath('data.percent', 25)
             ->assertJsonPath('data.bytes_done', 1024)
             ->assertJsonPath('data.log', ['photos/a.jpg: Copied (new)']);
 

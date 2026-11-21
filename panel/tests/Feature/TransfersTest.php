@@ -210,6 +210,8 @@ class TransfersTest extends TestCase
     public function test_several_buckets_can_be_imported_at_once(): void
     {
         $connection = $this->makeConnection();
+        // Garage refuses one of the two buckets: that one is reported, the other is imported.
+        $this->fakeJohnny(['bucket create bad_name' => Process::result('', 'Bucket name is not valid', 1)]);
 
         $this->post("/connections/{$connection->id}/import", ['buckets' => ['Photos', 'Bad_Name']])
             ->assertRedirect('/transfers')
@@ -272,7 +274,7 @@ class TransfersTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', 'running')
             ->assertJsonPath('active', true)
-            ->assertJsonPath('percent', 25.0)
+            ->assertJsonPath('percent', 25)
             ->assertJsonPath('log.0', 'photos/a.jpg: Copied (new)');
     }
 
