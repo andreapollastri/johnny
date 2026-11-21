@@ -1,4 +1,4 @@
-# Temporary: refresh composer.lock for PHP 8.6 and print the result. Removed once committed.
+# Temporary: refresh composer.lock (PHP 8.6, security fixes) and print the result. Removed once committed.
 name: Lock for PHP 8.6
 on:
   push:
@@ -19,6 +19,6 @@ jobs:
           php-version: '8.6'
           extensions: mbstring, pdo_sqlite, sqlite3, intl, bcmath
           coverage: none
-      - run: composer update --no-interaction --no-progress --with-all-dependencies --minimal-changes nette/schema nette/utils league/config
-      - run: composer install --no-interaction --no-progress --dry-run
+      - run: composer update --no-interaction --no-progress
+      - run: composer audit
       - run: git diff --stat composer.lock && echo '=====LOCK-BEGIN=====' && base64 -w0 composer.lock && echo && echo '=====LOCK-END====='
