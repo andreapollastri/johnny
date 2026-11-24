@@ -4,10 +4,10 @@ All notable changes to Johnny. Versions follow the release tags; the updater ins
 
 ## 2.0.1 — 2026-11-24
 
-- **PHP from packages.sury.org.** The ondrej/php PPA is being retired: it has no packages for Ubuntu 26.04, so `install-panel.sh` stopped with `Unable to locate package php8.6-fpm`, and on 22.04/24.04 its new Label stops `apt-get update`. `install-panel.sh` and `switch-php.sh` now take PHP from [packages.sury.org/php](https://packages.sury.org/php/README.txt) (same maintainer, same packages) and remove the PPA from the apt sources (`scripts/lib/johnny-php-repo.sh`).
-- Migration `011` moves existing servers to the new repository and tries the PHP 8.6 switch of migration `010` again where it could not run. On any problem the server keeps what it has and the update goes on.
+- No changes to Johnny itself: `VERSION`, changelog and documentation only. Published right after 2.0.0, so that servers have a newer release to update to.
+- The `1.3.0` tag pointed at the code of 2.0.0, whose `VERSION` says `2.0.0`: the updater refused it (`the VERSION file of 1.3.0 says 2.0.0`). `1.3.0` is not a Johnny version; 2.0.0 and 2.0.1 install normally.
 
-## 2.0.0 — 2026-11-21
+## 2.0.0 — 2026-11-24
 
 A new panel: a new look, data that moves in and out of Johnny, keys with scopes, and an API that covers all of it.
 
@@ -51,11 +51,13 @@ A new panel: a new look, data that moves in and out of Johnny, keys with scopes,
 
 - **PHP 8.6.** New servers get PHP 8.6. Migration `010` moves existing servers from 8.5 with `scripts/switch-php.sh`: same extensions, FPM pools carried over, the panel checked on 8.6 before Caddy and `php` are switched; the 8.5 packages stay. On any problem the server stays on PHP 8.5, still supported. CI runs on 8.5 and 8.6.
 
+- **PHP from packages.sury.org.** The ondrej/php PPA is being retired: it has no packages for Ubuntu 26.04, and on 22.04/24.04 its new Label stops `apt-get update`. `install-panel.sh` and `switch-php.sh` take PHP from [packages.sury.org/php](https://packages.sury.org/php/README.txt) (same maintainer, same packages) and remove the PPA from the apt sources (`scripts/lib/johnny-php-repo.sh`). Migration `011` moves existing servers over and tries the PHP 8.6 switch again where it could not run.
+
 - **Dependencies** refreshed within their constraints: Laravel 13.43, Symfony 8.1.11 (security fixes in http-foundation, http-kernel, routing, serializer, mime, filesystem), nette for PHP 8.6. `composer audit` is clean.
 
 ### Upgrading from 1.2.x
 
-Nothing to do: the nightly update (or *Update* on the Updates page) migrates the panel's database and runs migrations `009` (scheduler) and `010` (PHP 8.6). Existing buckets, keys and permissions are not touched.
+Nothing to do: the nightly update (or *Update* on the Updates page) migrates the panel's database and runs migrations `009` (scheduler), `010` (PHP 8.6) and `011` (PHP from packages.sury.org). Existing buckets, keys and permissions are not touched.
 
 ## 1.2.1
 
