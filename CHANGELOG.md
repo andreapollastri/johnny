@@ -2,6 +2,11 @@
 
 All notable changes to Johnny. Versions follow the release tags; the updater installs them on the stable channel.
 
+## Unreleased
+
+- **PHP from packages.sury.org.** The ondrej/php PPA is being retired: it has no packages for Ubuntu 26.04, so `install-panel.sh` stopped with `Unable to locate package php8.6-fpm`, and on 22.04/24.04 its new Label stops `apt-get update`. `install-panel.sh` and `switch-php.sh` now take PHP from [packages.sury.org/php](https://packages.sury.org/php/README.txt) (same maintainer, same packages) and remove the PPA from the apt sources (`scripts/lib/johnny-php-repo.sh`).
+- Migration `011` moves existing servers to the new repository and tries the PHP 8.6 switch of migration `010` again where it could not run. On any problem the server keeps what it has and the update goes on.
+
 ## 2.0.0 — 2026-11-21
 
 A new panel: a new look, data that moves in and out of Johnny, keys with scopes, and an API that covers all of it.

@@ -19,6 +19,8 @@ PANEL_DIR="${REPO_ROOT}/panel"
 source "${_SCRIPT_DIR}/lib/johnny-wwwdata.sh"
 # shellcheck source=lib/johnny-panel-cron.sh
 source "${_SCRIPT_DIR}/lib/johnny-panel-cron.sh"
+# shellcheck source=lib/johnny-php-repo.sh
+source "${_SCRIPT_DIR}/lib/johnny-php-repo.sh"
 
 # Never use: sudo -u www-data cmd >file  (redirect runs as root — see lib/johnny-wwwdata.sh).
 
@@ -28,9 +30,12 @@ if ! run_wwwdata bash -c 'cd "$PANEL_DIR" && pwd' >/dev/null 2>&1; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
+# The retired ondrej/php PPA goes first: where it is still listed, its new Label stops apt-get update.
+remove_ondrej_ppa
 apt-get update
-apt-get install -y software-properties-common curl git unzip sqlite3
-add-apt-repository -y ppa:ondrej/php
+apt-get install -y ca-certificates curl git unzip sqlite3
+# PHP from packages.sury.org/php (the PPA has no packages for Ubuntu 26.04).
+ensure_php_repo || die "the PHP repository (packages.sury.org/php) could not be set up — see the message above."
 apt-get update
 apt-get install -y \
   php8.6-fpm php8.6-cli php8.6-mbstring php8.6-xml php8.6-curl php8.6-zip \

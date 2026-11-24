@@ -38,11 +38,12 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 # 1. The packages: the same extensions the current version has, plus what the panel needs.
-if ! grep -rqs 'ondrej/php' /etc/apt/sources.list /etc/apt/sources.list.d/; then
-  apt-get install -y -q software-properties-common >/dev/null || keep "software-properties-common could not be installed"
-  add-apt-repository -y ppa:ondrej/php >/dev/null || keep "the ondrej/php repository could not be added"
-fi
+# They come from packages.sury.org/php; the retired ondrej/php PPA is taken out of the sources.
+# shellcheck source=lib/johnny-php-repo.sh
+source "${REPO_ROOT}/scripts/lib/johnny-php-repo.sh"
+ensure_php_repo || keep "the PHP repository (packages.sury.org/php) could not be set up"
 apt-get update -q >/dev/null || keep "apt-get update failed"
+apt-cache show "php${TARGET}-fpm" >/dev/null 2>&1 || keep "php${TARGET}-fpm is not in the PHP repository for this system yet"
 
 packages=("php${TARGET}-fpm" "php${TARGET}-cli" "php${TARGET}-mbstring" "php${TARGET}-xml" "php${TARGET}-curl" \
   "php${TARGET}-zip" "php${TARGET}-sqlite3" "php${TARGET}-bcmath" "php${TARGET}-intl")
