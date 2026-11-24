@@ -532,7 +532,7 @@ SYSTEM_REBOOT=0         # 1: reboot 5 minutes after a nightly server update that
 JOHNNY_REPO=https://github.com/andreapollastri/johnny.git
 ```
 
-**From 1.2.x — nothing to do.** The update that installs 2.0 migrates the panel's database (connections, transfers, syncs, global keys) and runs two migrations: `009` installs `/etc/cron.d/johnny-panel` where the panel is installed, `010` moves the panel to **PHP 8.6**. Existing keys, buckets and permissions are not touched.
+**From 1.2.x — nothing to do.** The update that installs 2.0 migrates the panel's database (connections, transfers, syncs, global keys) and runs three migrations: `009` installs `/etc/cron.d/johnny-panel` where the panel is installed, `010` moves the panel to **PHP 8.6**, `011` takes PHP from packages.sury.org instead of the retired ondrej/php PPA. Existing keys, buckets and permissions are not touched.
 
 The PHP switch (`scripts/switch-php.sh`) installs PHP 8.6 next to 8.5 with the same extensions, carries the FPM pools over, checks that the panel boots on 8.6, then points Caddy and the `php` command at it and stops the PHP 8.5 FPM (its packages stay). If any step fails the panel stays on PHP 8.5, which 2.0 still supports, and the update goes on; run the switch again by hand with `sudo bash /opt/johnny/scripts/switch-php.sh /opt/johnny 8.6`.
 
