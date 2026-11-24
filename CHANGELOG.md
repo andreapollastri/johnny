@@ -2,6 +2,10 @@
 
 All notable changes to Johnny. Versions follow the release tags; the updater installs them on the stable channel.
 
+## 2.0.2 — 2026-11-24
+
+- **Updates started from the panel.** The *Update* button starts the update with `systemd-run`, where root has no `HOME`: the install steps stopped at once with `fatal: $HOME not set` (`git config --global`) and the previous build was put back. `scripts/update.sh` and `scripts/johnny-update` now take `HOME` from the user's entry in `/etc/passwd` when it is missing. The nightly update (cron) and `sudo johnny update apply` from a shell already had one.
+
 ## 2.0.1 — 2026-11-24
 
 - No changes to Johnny itself: `VERSION`, changelog and documentation only. Published right after 2.0.0, so that servers have a newer release to update to.

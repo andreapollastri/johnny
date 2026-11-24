@@ -17,6 +17,13 @@ die() { echo "Error: $*" >&2; exit 1; }
 
 [[ "$(id -u)" -eq 0 ]] || die "Run as root (sudo)."
 
+# Started with systemd-run (the panel's Update button), the environment has no HOME, and
+# git config --global and Composer need one ("fatal: $HOME not set").
+if [[ -z "${HOME:-}" ]]; then
+  HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  export HOME="${HOME:-/root}"
+fi
+
 REPO_ROOT=""
 GIT_PULL=0
 while [[ $# -gt 0 ]]; do
