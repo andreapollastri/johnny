@@ -60,6 +60,9 @@ KEEP_BACKUPS=5
 DEFAULT_REPO=https://github.com/andreapollastri/johnny.git
 
 [ -n "$ROOT" ] || [ "$(id -u)" = 0 ] || { echo "johnny update must run as root (sudo)" >&2; exit 1; }
+# systemd-run (the panel's Update and server update buttons) starts this with no HOME:
+# git config --global and Composer, in the install steps, need one.
+if [ -z "${HOME:-}" ]; then HOME=$(getent passwd "$(id -u)" | cut -d: -f6); export HOME=${HOME:-/root}; fi
 REPO_ROOT=${JOHNNY_REPO_ROOT:-$(tr -d '[:space:]' < "$ETC/repo.path" 2>/dev/null || true)}
 [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] || { echo "Johnny's git checkout was not found ($ETC/repo.path, written by install.sh)" >&2; exit 1; }
 REPO_ROOT=$(cd "$REPO_ROOT" && pwd)
